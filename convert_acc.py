@@ -34,7 +34,7 @@ from PyQt5.QtGui import QPainter
 from PyQt5.QtWidgets import QButtonGroup
 from PyQt5.QtWidgets import QRadioButton
 
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
@@ -180,7 +180,10 @@ class AccConvertModel:
 
 
     def getSensitivity(self):
-        """return float holding sensitivity in V/g based on given sensorCode"""
+        """
+        return float holding sensitivity in V/g based
+        on first few letters of given sensorCode
+        """
         groundFloorSensorCodes = ['B4F', 'FF']
         upperFloorSensorCodes = ['S12', 'N12', 'S24', 'N24', 'S39', 'N39']
         for code in groundFloorSensorCodes:
@@ -189,7 +192,10 @@ class AccConvertModel:
         for code in upperFloorSensorCodes:
             if self.sensorCode.startswith(code):
                 self.sensitivity = 0.625
-        return self.sensitivity
+        if self.sensitivity:
+            return self.sensitivity
+        else:
+            raise ValueError('Non-null value must be assigned to sensitivity.')
 
 
     def convertCountToG(self):
@@ -240,9 +246,9 @@ class AccConvertModel:
 
 
     def getStats(self, columnName):
-        minVal = round(df[columnName].min(), 5)
-        maxVal = round(df[columnName].max(), 5)
-        meanVal = round(df[columnName].mean(), 5)
+        minVal = round(self.df[columnName].min(), 5)
+        maxVal = round(self.df[columnName].max(), 5)
+        meanVal = round(self.df[columnName].mean(), 5)
         stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         return stats
 
@@ -265,7 +271,8 @@ class AccConvertModel:
         return self.df
 
 
-# Create a subclass of or QDialog (or QMainWindow?) to set up the portion of GUI to take information from user
+# Create a subclass of QMainWindow to set up the portion of GUI 
+# to take information from user
 class AccConvertUi(QMainWindow):
     """AccConvert's initial view for taking input from user."""
     def __init__(self, model, results):
@@ -290,10 +297,7 @@ class AccConvertUi(QMainWindow):
         self._createRadioButtons()
         self._createSubmitButton()
 
-        #self.eventId = self.getEventId()
-        #self.miniseedDirPath = self.getMiniseedDirPath()
-
-        #self.handleSubmitButton()
+        #self._sensorCodeWithChannel = None
 
 
     def _getEventId(self):
@@ -334,10 +338,8 @@ class AccConvertUi(QMainWindow):
     # was in Model
     def _getWorkingDir(self):
         """
-        if it doesn't already exist, create working dir using event id entered by user
-        return string holding path to working dir for event
-        ret:
-        workingPath: string holding path of working directory for event
+        If not yet created, create working dir using event id entered
+        by user. return string holding path to working dir for event
         """
         
         self.eventId = ""
@@ -360,8 +362,6 @@ class AccConvertUi(QMainWindow):
         self.miniseedDirLabel.setText('Path of directory holding miniseed files')
         self.eventField = QLineEdit(self)
         self.miniseedDirField = QLineEdit(self)
-        #self.eventField = QTextEdit(self)
-        #self.miniseedDirField = QTextEdit(self)
         self.generalLayout.addWidget(self.eventLabel)
         self.generalLayout.addWidget(self.eventField)
         self.generalLayout.addWidget(self.miniseedDirLabel)
@@ -398,6 +398,14 @@ class AccConvertUi(QMainWindow):
         return [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
 
 
+    # not to be confused with getSensorCode() in model
+    def _getSensorCodeWithChannel(self, inputTxtFile):
+        """Return string holding both sensor code and channel e.g. 'B4Fx'"""
+        inputTxtFileBase = inputTxtFile.split('.txt')[0]
+        sensorCodeWithChannel = inputTxtFileBase.rsplit('.')[-1]
+        return sensorCodeWithChannel
+
+
     # manipulate data per Autopro report
     # move code shared with other approaches to separate method later
     def _mainAutopro(self):
@@ -405,13 +413,19 @@ class AccConvertUi(QMainWindow):
         self._getWorkingDir()
         self._convertMseedToAscii()
         # move this to main when dealing with more than one text file
-        self.inputTxtFilePaths = self._getInputTxtFilePaths()
+        inputTxtFilePaths = self._getInputTxtFilePaths()
+        # move to separate function?
+        txtFileCount = len(inputTxtFilePaths)
+        txtFilePositions = list(range(1, txtFileCount + 1))
+        txtFileDict = dict(zip(txtFilePositions, inputTxtFilePaths))
 
-        # set model attributes
-        # only converting single text file for now
+        for position, file in txtFileDict.items():
 
-        for f in self.inputTxtFilePaths:
-            self._model.df = self._convertTxtToDf(f)
+            # make this attribute of view class?
+            figureTitle = self._getSensorCodeWithChannel(file)
+
+            # set model attributes
+            self._model.df = self._convertTxtToDf(file)
             self._model.headerList = self._model.getHeaderList()
 
             logging.debug(self._model.df.head())
@@ -447,7 +461,9 @@ class AccConvertUi(QMainWindow):
 
             self._model.removeZeropad()
 
-            self._results.plotFig('g', 'test')
+            #stats = self._model.getStats('g')
+
+            self._results.plotFig('g', position, figureTitle)
 
             self._results.show()
 
@@ -456,16 +472,13 @@ class AccConvertUi(QMainWindow):
         """Create single submit button"""
         self.submitBtn = QPushButton(self)
         self.submitBtn.setText("Submit")
-        #submitBtn.clicked.connect(self.greeting)
-        #self.eventId = self.getEventId()
-        #self.miniseedDirPath = self.getMiniseedDirPath()
-        #self.submitBtn.clicked.connect(self.mainAutopro)
-        #submitBtn.clicked.connect(self.model.mainAutopro())
+        # using only Autopro approach now - add others later
         self.submitBtn.clicked.connect(self._mainAutopro)
         self.generalLayout.addWidget(self.submitBtn)
 
 
     def _printPDF(self):
+        """Print results to pdf"""
         fn, _ = QFileDialog.getSaveFileName(
             self, "Export PDF", None, "PDF files (.pdf);;All Files()"
         )
@@ -476,23 +489,38 @@ class AccConvertUi(QMainWindow):
             printWidget(self, fn)
 
 
-class DisplayCanvas(FigureCanvasQTAgg):
-    def __init__(self, model, width=4, height=3, dpi=100):
+# Create canvas to display results by subclassing FigureCanvasQTAgg
+class ResultsCanvas(FigureCanvas):
+    def __init__(self, model, width=7, height=6, dpi=100):
+        
+        figure = Figure(figsize=(width, height), dpi=dpi, tight_layout=True)
         self._model = model
-        figure = Figure(figsize=(width, height), dpi=dpi)
         #self.axes = figure.add_subplot(111)
         #self.axes.xaxis.set_major_locator(plt.MaxNLocator(4))
 
-        FigureCanvasQTAgg.__init__(self, figure)
+        FigureCanvas.__init__(self, figure)
         #self.plotFig()
 
-
-    def plotFig(self, yData, figTitle):
-        #data = self._model.df
-        ax = self.figure.add_subplot(111)
-        ax.xaxis.set_major_locator(plt.MaxNLocator(4))
-        self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
         self.draw()
+
+
+    def plotFig(self, yData, subplotPos, figTitle):
+        """
+        Plot figure
+        args:
+        yData: string holding name of dataframe column to be plotted
+        subplotPos: integer holding position of plot
+        """
+
+        ax = self.figure.add_subplot(2, 2, subplotPos)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(4))
+        #stats = self._model.getStats(yData)
+        #ax.text(0.5, 0.1, stats)
+        #ax2.xaxis.set_major_locator(plt.MaxNLocator(4))
+        self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
+        #self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax2)
+
+        #self.draw()
 
 
 
@@ -503,21 +531,13 @@ def main():
     convertacc = QApplication(sys.argv)
 
     model = AccConvertModel()
-    results = DisplayCanvas(model)
+    results = ResultsCanvas(model)
     # Show the application's GUI
 
     view = AccConvertUi(model, results)
     
     view.show()
 
-    #results.show()
-
-    """
-    view.eventId = view.getEventId()
-    view.miniseedDirPath = view.getMiniseedDirPath()
-    if view.eventId and view.miniseedDirPath:
-        view.handleSubmitButton(view.eventId, view.miniseedDirPath)
-    """
     # Create the instances of the model and the controller
     #model = AccConvertModel()
     #AccConvertCtrl(model=model, view=view)
