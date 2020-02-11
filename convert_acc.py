@@ -44,13 +44,23 @@ __author__ = 'Nick LiBassi'
 
 ERROR_MSG = 'ERROR'
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# set logging to 'DEBUG' to print debug statements to console
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 """
 General Notes:
 use camelCase throughout as Qt uses it
 remove unused imports leftover from calculator app
 """
+
+def getStats(df, columnName):
+    minVal = round(df[columnName].min(), 5)
+    maxVal = round(df[columnName].max(), 5)
+    meanVal = round(df[columnName].mean(), 5)
+    #stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
+    stats = 'min: {0}\nmax: {1}'.format(minVal, maxVal)
+    return stats
+
 
 def printWidget(widget, filename):
     """
@@ -243,14 +253,6 @@ class AccConvertModel:
         """add new column to df showing acceleration in m/s^2"""
         self.df['acc_ms2'] = self.df['offset_g'] * 9.80665
         return self.df
-
-
-    def getStats(self, columnName):
-        minVal = round(self.df[columnName].min(), 5)
-        maxVal = round(self.df[columnName].max(), 5)
-        meanVal = round(self.df[columnName].mean(), 5)
-        stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
-        return stats
 
 
     def removeZeropad(self, padLength=500, location='both'):
@@ -463,7 +465,7 @@ class AccConvertUi(QMainWindow):
 
             #stats = self._model.getStats('g')
 
-            self._results.plotFig('g', position, figureTitle)
+            self._results.plotFig('offset_g', position, figureTitle)
 
             self._results.show()
 
@@ -491,9 +493,10 @@ class AccConvertUi(QMainWindow):
 
 # Create canvas to display results by subclassing FigureCanvasQTAgg
 class ResultsCanvas(FigureCanvas):
-    def __init__(self, model, width=7, height=6, dpi=100):
+    def __init__(self, model, width=14, height=20, dpi=100):
         
-        figure = Figure(figsize=(width, height), dpi=dpi, tight_layout=True)
+        #figure = Figure(figsize=(width, height), dpi=dpi, tight_layout={'w_pad': 0.25, 'h_pad': 0.25})
+        figure = Figure(figsize=(width, height), dpi=dpi)
         self._model = model
         #self.axes = figure.add_subplot(111)
         #self.axes.xaxis.set_major_locator(plt.MaxNLocator(4))
@@ -511,15 +514,20 @@ class ResultsCanvas(FigureCanvas):
         yData: string holding name of dataframe column to be plotted
         subplotPos: integer holding position of plot
         """
-
-        ax = self.figure.add_subplot(2, 2, subplotPos)
+        # eventually will give 8, 3... for 8 rows, 3 columns
+        #ax = self.figure.add_subplot(nrows=2, ncols=2, index=subplotPos)
+        ax = self.figure.add_subplot(8, 3, subplotPos)
+        ax.set_ylim(-0.008, 0.008)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))
-        #stats = self._model.getStats(yData)
-        #ax.text(0.5, 0.1, stats)
+        dfCopy = self._model.df.copy()
+        stats = getStats(dfCopy, yData)
+        logging.debug('stats for {0}: {1}'.format(figTitle, stats))
+        ax.text(30000, -0.005, stats)
         #ax2.xaxis.set_major_locator(plt.MaxNLocator(4))
         self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
         #self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax2)
-
+        self.figure.tight_layout()
+        del dfCopy
         #self.draw()
 
 
