@@ -53,6 +53,29 @@ use camelCase throughout as Qt uses it
 remove unused imports leftover from calculator app
 """
 
+
+def sortTxtFiles(inputTxtFileList):
+    """
+    Sort given text files according to Safe report.
+    (may need to be modified later for events that span two hours)
+    """
+    sortedList = []
+    sensorCodePrefixes = ['N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF']
+    for prefix in sensorCodePrefixes:
+        fileGroup = [f for f in inputTxtFileList if prefix in f]
+        sortedFileGroup = sorted(fileGroup)
+        sortedList += sortedFileGroup
+    return sortedList
+
+
+# not to be confused with getSensorCode() in model class
+def getSensorCodeWithChannel(inputTxtFile):
+    """Return string holding both sensor code and channel e.g. 'B4Fx'"""
+    inputTxtFileBase = inputTxtFile.split('.txt')[0]
+    sensorCodeWithChannel = inputTxtFileBase.rsplit('.')[-1]
+    return sensorCodeWithChannel
+
+
 def getStats(df, columnName):
     minVal = round(df[columnName].min(), 5)
     maxVal = round(df[columnName].max(), 5)
@@ -400,12 +423,7 @@ class AccConvertUi(QMainWindow):
         return [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
 
 
-    # not to be confused with getSensorCode() in model
-    def _getSensorCodeWithChannel(self, inputTxtFile):
-        """Return string holding both sensor code and channel e.g. 'B4Fx'"""
-        inputTxtFileBase = inputTxtFile.split('.txt')[0]
-        sensorCodeWithChannel = inputTxtFileBase.rsplit('.')[-1]
-        return sensorCodeWithChannel
+
 
 
     # manipulate data per Autopro report
@@ -414,9 +432,11 @@ class AccConvertUi(QMainWindow):
         logging.debug("mainAutopro run")
         self._getWorkingDir()
         self._convertMseedToAscii()
-        # move this to main when dealing with more than one text file
+        
         inputTxtFilePaths = self._getInputTxtFilePaths()
-        # move to separate function?
+        inputTxtFilePaths = sortTxtFiles(inputTxtFilePaths)
+
+        # move to separate function later?
         txtFileCount = len(inputTxtFilePaths)
         txtFilePositions = list(range(1, txtFileCount + 1))
         txtFileDict = dict(zip(txtFilePositions, inputTxtFilePaths))
@@ -424,7 +444,7 @@ class AccConvertUi(QMainWindow):
         for position, file in txtFileDict.items():
 
             # make this attribute of view class?
-            figureTitle = self._getSensorCodeWithChannel(file)
+            figureTitle = getSensorCodeWithChannel(file)
 
             # set model attributes
             self._model.df = self._convertTxtToDf(file)
@@ -479,16 +499,7 @@ class AccConvertUi(QMainWindow):
         self.generalLayout.addWidget(self.submitBtn)
 
 
-    def _printPDF(self):
-        """Print results to pdf"""
-        fn, _ = QFileDialog.getSaveFileName(
-            self, "Export PDF", None, "PDF files (.pdf);;All Files()"
-        )
-        if fn:
-            if QFileInfo(fn).suffix() == "":
-                fn += ".pdf"
 
-            printWidget(self, fn)
 
 
 # Create canvas to display results by subclassing FigureCanvasQTAgg
@@ -506,6 +517,8 @@ class ResultsCanvas(FigureCanvas):
 
         self.draw()
 
+        #self._printPDF()
+
 
     def plotFig(self, yData, subplotPos, figTitle):
         """
@@ -514,21 +527,32 @@ class ResultsCanvas(FigureCanvas):
         yData: string holding name of dataframe column to be plotted
         subplotPos: integer holding position of plot
         """
-        # eventually will give 8, 3... for 8 rows, 3 columns
-        #ax = self.figure.add_subplot(nrows=2, ncols=2, index=subplotPos)
         ax = self.figure.add_subplot(8, 3, subplotPos)
+        # y_lim values will be set dynamically per event
         ax.set_ylim(-0.008, 0.008)
+        ax.xaxis.set_visible(False)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))
         dfCopy = self._model.df.copy()
         stats = getStats(dfCopy, yData)
         logging.debug('stats for {0}: {1}'.format(figTitle, stats))
+        # text location will be set dynamically per event
         ax.text(30000, -0.005, stats)
-        #ax2.xaxis.set_major_locator(plt.MaxNLocator(4))
         self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
-        #self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax2)
         self.figure.tight_layout()
         del dfCopy
         #self.draw()
+
+
+    def _printPDF(self):
+        """Print results to pdf"""
+        fn, _ = QFileDialog.getSaveFileName(
+            self, "Export PDF", None, "PDF files (.pdf);;All Files()"
+        )
+        if fn:
+            if QFileInfo(fn).suffix() == "":
+                fn += ".pdf"
+
+            printWidget(self, fn)
 
 
 
@@ -550,10 +574,11 @@ def main():
     #model = AccConvertModel()
     #AccConvertCtrl(model=model, view=view)
 
-    
-    #view._printPDF()
+    #results._printPDF()
     # Execute the calculator's main loop
     sys.exit(convertacc.exec_())
+
+    #results._printPDF()
 
 
 
