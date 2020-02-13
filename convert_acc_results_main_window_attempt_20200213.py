@@ -35,6 +35,9 @@ from PyQt5.QtWidgets import QButtonGroup
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtWidgets import QScrollArea
 
+import matplotlib
+# Make sure that we are using QT5
+matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -353,58 +356,76 @@ class AccConvertUi(QMainWindow):
         """View initializer."""
         # call __init__() method of parent class
         super().__init__()
-        self.initUI()
+        #self.initUI()
 
         self._model = model
         # results will be shown in second window
         #self._results = results
 
-        
-        
-        # Set some of main window's properties
-        """
-        self.setWindowTitle('Accelerometer Data Conversion')
-        self.setFixedSize(500, 300)
-        # Set the central widget and the general layout
+        self.widget = QWidget()
+        self.setCentralWidget(self.widget)
         self.generalLayout = QVBoxLayout()
-        self._centralWidget = QWidget(self)
-        self.setCentralWidget(self._centralWidget)
-        self._centralWidget.setLayout(self.generalLayout)
+        self.widget.setLayout(self.generalLayout)
+        self.widget.layout().setContentsMargins(0,0,0,0)
+        self.widget.layout().setSpacing(0)
 
-        #self.scroll = QScrollArea(self._centralWidget)
-
-        #self.generalLayout.addWidget(self.scroll)
         
-        # Create the display and the buttons
-        self._createTextInputFields()
-        self._createRadioButtons()
-        self._createSubmitButton()
-
-        self._textFileCount = None
-        """
-        #self._sensorCodeWithChannel = None
-
-
-    def initUI(self):
         self.figure = Figure(figsize=(14, 35), dpi=100)
-
         self.canvas = FigureCanvas(self.figure)
-        self.scroll = QScrollArea()             # Scroll Area which contains the widgets, set as the centralWidget
-        self.widget = QWidget()                 # Widget that contains the collection of Vertical Box
-        self.generalLayout = QVBoxLayout()               # The Vertical Box that contains the Horizontal Boxes of  labels and buttons
+        self.canvas.draw()
+        
+        self.scroll = QScrollArea()
+        self.scroll.setWidget(self.canvas)
+        
+        self.nav = NavigationToolbar(self.canvas, self.widget)
+        self.widget.layout().addWidget(self.nav)
+        self.widget.layout().addWidget(self.scroll)
+
+        #Scroll Area Properties
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setWidgetResizable(True)
+        
+        self._createTextInputFields()
+        self._createRadioButtons()
+        self._createSubmitButton()
+
+        #self.setGeometry(600, 100, 1000, 900)
+        self.setWindowTitle('Accelerometer Data Conversion')
+
+    '''
+    def initUI(self):
+        
+
+        self.widget = QWidget()
+        self.setCentralWidget(self.widget)
+        self.generalLayout = QVBoxLayout()
+        self.widget.setLayout(self.generalLayout)
+        self.widget.layout().setContentsMargins(0,0,0,0)
+        self.widget.layout().setSpacing(0)
+
+        self.figure = Figure(figsize=(14, 35), dpi=100)
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.draw()
+
+        self.scroll = QScrollArea()
+        self.scroll.setWidget(self.canvas)
+        
+        self.nav = NavigationToolbar(self.canvas, self.widget)
+        self.widget.layout().addWidget(self.nav)
+        self.widget.layout().addWidget(self.scroll)
 
         self._createTextInputFields()
         self._createRadioButtons()
         self._createSubmitButton()
 
-        self.generalLayout.addWidget(self.canvas)
 
         """
         for i in range(1,50):
             object = QLabel("TextLabel")
             self.generalLayout.addWidget(object)
         """
-        self.widget.setLayout(self.generalLayout)
+        
 
         #Scroll Area Properties
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -412,14 +433,12 @@ class AccConvertUi(QMainWindow):
         self.scroll.setWidgetResizable(True)
         self.scroll.setWidget(self.widget)
 
-        self.setCentralWidget(self.scroll)
-
         self.setGeometry(600, 100, 1000, 900)
         self.setWindowTitle('Accelerometer Data Conversion')
-        self.show()
+        #self.show()
 
         return
-
+    '''
 
     def _getEventId(self):
         """Get user input (string) for event id field"""
@@ -490,8 +509,9 @@ class AccConvertUi(QMainWindow):
 
 
     def _createRadioButtons(self):
+        self.approachGroup = QButtonGroup(self.widget)
         #self.approachGroup = QButtonGroup(self._centralWidget)
-        self.approachGroup = QButtonGroup(self.scroll)
+        #self.approachGroup = QButtonGroup(self.scroll)
         self.timeAutopro = QRadioButton('Time-domain per Autopro report')
         self.timeAutopro.setChecked(True)
         self.timeBaseline = QRadioButton('Time-domain with baseline correction')
