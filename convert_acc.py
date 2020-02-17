@@ -327,6 +327,7 @@ class AccConvertModel:
         """
         b, a = self._butterBandpass()
         self.df['bandpassed_g'] = lfilter(b, a, self.df['offset_g'])
+        self.df['bandpassed_ms2'] = lfilter(b, a, self.df['acc_ms2'])
         return self.df
 
 
@@ -342,6 +343,31 @@ class AccConvertModel:
             integratedList.append(integrated)
         self.df[outputColumn] = integratedList
         return self.df
+
+
+    # MAY need to detrend data without the zero padding
+    # type can be 'linear' (linear regression) or 'constant' (mean subtracted)
+    def detrendData(self, inputColumn, outputColumn):
+        self.df[outputColumn] = detrend(self.df[inputColumn], type='linear')
+
+
+    def _butterHighpass(self):
+        """
+        modeled after Butterworth bandpass code in scipy cookbook
+        """
+        nyq = 0.5 * self.fs
+        cutoff = self.lowcut / nyq
+        b, a = butter(self.order, cutoff, btype='high')
+        return b, a
+
+
+    def butterHighpassFilter(self):
+        """
+        modeled after Butterworth bandpass code in scipy cookbook
+        """
+        pass
+        #b, a = self._butterHighpass()
+        #self.df['name of displacement column']
 
 
 # Create a subclass of QMainWindow to set up the portion of GUI 
@@ -538,13 +564,34 @@ class AccConvertUi(QMainWindow):
 
             logging.debug(self._model.getHeaderList())
 
-            #self._model.removeZeropad()
-
             #stats = self._model.getStats('g')
 
+            # plot acceleration
             self._results.createSubplot('offset_g', 0.008, position, pathTitlePair[1])
 
-            self._results.createSubplot('acc_ms2', 0.05, position + 24, pathTitlePair[1])
+            # get 'bandpassed_g' and 'bandpassed_ms2'
+            self._model.butterBandpassFilter()
+
+            self._model.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
+
+            self._model.detrendData('velocity_ms', 'detrended_velocity_ms')
+
+            #self._model.removeZeropad()
+
+            # plot velocity
+            self._results.createSubplot('detrended_velocity_ms', 0.005, position + 24, pathTitlePair[1])
+            
+            
+            # add displacement
+            self._model.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
+
+            self._model.detrendData('displacement_m', 'detrended_displacement_m')
+
+            self._model.df['detrended_displacement_cm'] = self._model.df['detrended_displacement_m'] * 100
+
+            # plot displacement
+            self._results.createSubplot('detrended_displacement_cm', 0.001, position + 48, pathTitlePair[1])
+            
             self._results.show()
 
 
@@ -602,7 +649,7 @@ class ResultsCanvas(QMainWindow):
         yData: string holding name of dataframe column to be plotted
         subplotPos: integer holding position of plot
         """
-        ax = self.figure.add_subplot(16, 3, subplotPos)
+        ax = self.figure.add_subplot(24, 3, subplotPos)
         # y_lim values will be set dynamically per event
         ax.set_ylim(-yLimit, yLimit)
         ax.xaxis.set_visible(False)
@@ -612,7 +659,8 @@ class ResultsCanvas(QMainWindow):
         logging.debug('stats for {0}: {1}'.format(figTitle, stats))
         # text location will be set dynamically per event
         ax.text(20000, -0.005, stats)
-        self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
+        # plot all data except for zero pads - edit later if necessary
+        self._model.df.iloc[500:40500].reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
         self.figure.tight_layout()
         del dfCopy
         #self.draw()
