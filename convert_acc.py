@@ -131,7 +131,6 @@ class AccConvertModel:
         self.dt = 1/float(self.fs)
 
 
-
     def getHeaderList(self):
         self.headerList = [item for item in list(self.df.columns.values)]
         return self.headerList
@@ -349,20 +348,15 @@ class AccConvertModel:
 # to take information from user
 class AccConvertUi(QMainWindow):
     """AccConvert's initial view for taking input from user."""
-    def __init__(self, model):
+    def __init__(self, model, results):
         """View initializer."""
-        # call __init__() method of parent class
         super().__init__()
-        self.initUI()
 
         self._model = model
         # results will be shown in second window
-        #self._results = results
-
-        
+        self._results = results
         
         # Set some of main window's properties
-        """
         self.setWindowTitle('Accelerometer Data Conversion')
         self.setFixedSize(500, 300)
         # Set the central widget and the general layout
@@ -370,55 +364,13 @@ class AccConvertUi(QMainWindow):
         self._centralWidget = QWidget(self)
         self.setCentralWidget(self._centralWidget)
         self._centralWidget.setLayout(self.generalLayout)
-
-        #self.scroll = QScrollArea(self._centralWidget)
-
-        #self.generalLayout.addWidget(self.scroll)
         
         # Create the display and the buttons
         self._createTextInputFields()
         self._createRadioButtons()
         self._createSubmitButton()
 
-        self._textFileCount = None
-        """
-        #self._sensorCodeWithChannel = None
-
-
-    def initUI(self):
-        self.figure = Figure(figsize=(14, 35), dpi=100)
-
-        self.canvas = FigureCanvas(self.figure)
-        self.scroll = QScrollArea()             # Scroll Area which contains the widgets, set as the centralWidget
-        self.widget = QWidget()                 # Widget that contains the collection of Vertical Box
-        self.generalLayout = QVBoxLayout()               # The Vertical Box that contains the Horizontal Boxes of  labels and buttons
-
-        self._createTextInputFields()
-        self._createRadioButtons()
-        self._createSubmitButton()
-
-        self.generalLayout.addWidget(self.canvas)
-
-        """
-        for i in range(1,50):
-            object = QLabel("TextLabel")
-            self.generalLayout.addWidget(object)
-        """
-        self.widget.setLayout(self.generalLayout)
-
-        #Scroll Area Properties
-        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setWidget(self.widget)
-
-        self.setCentralWidget(self.scroll)
-
-        self.setGeometry(600, 100, 1000, 900)
-        self.setWindowTitle('Accelerometer Data Conversion')
-        self.show()
-
-        return
+        #self._txtFileCount = None
 
 
     def _getEventId(self):
@@ -490,8 +442,7 @@ class AccConvertUi(QMainWindow):
 
 
     def _createRadioButtons(self):
-        #self.approachGroup = QButtonGroup(self._centralWidget)
-        self.approachGroup = QButtonGroup(self.scroll)
+        self.approachGroup = QButtonGroup(self._centralWidget)
         self.timeAutopro = QRadioButton('Time-domain per Autopro report')
         self.timeAutopro.setChecked(True)
         self.timeBaseline = QRadioButton('Time-domain with baseline correction')
@@ -522,47 +473,15 @@ class AccConvertUi(QMainWindow):
 
     def _setPlotDict(self, sortedTxtFilePaths):
         """
-        return dictionary with the following:
+        set dictionary with the following:
         keys: positions (int) of plots
-        values: tuple in form: (path, sensor codes with channels)
+        values: tuple in form: (path, sensor codes with channels (used as subplot titles))
         """
         #txtFileCount = len(sortedTxtFilePaths)
         txtFilePositions = list(range(1, self._txtFileCount + 1))
         figureTitles = [getSensorCodeWithChannel(path) for path in sortedTxtFilePaths]
         zippedPathsTitles = zip(sortedTxtFilePaths, figureTitles)
         self.plotDict = dict(zip(txtFilePositions, zippedPathsTitles))
-        return self.plotDict
-
-
-    def _updatePlotDict(self):
-        newKeys = [k + 24 for k in self.plotDict.keys()]
-        newDict = dict(zip(newKeys, self.plotDict.values()))
-        self.plotDict = newDict
-        return self.plotDict
-
-
-    def _plotFig(self, yData, yLimit, subplotPos, figTitle):
-        """
-        Plot figure
-        args:
-        yData: string holding name of dataframe column to be plotted
-        yLimit: float holding abs value of max range to be shown on plot
-        subplotPos: integer holding position of plot
-
-        """
-        ax = self.figure.add_subplot(16, 3, subplotPos)
-        # y_lim values will be set dynamically per event
-        ax.set_ylim(-yLimit, yLimit)
-        ax.xaxis.set_visible(False)
-        ax.xaxis.set_major_locator(plt.MaxNLocator(4))
-        dfCopy = self._model.df.copy()
-        stats = getStats(dfCopy, yData)
-        logging.debug('stats for {0}: {1}'.format(figTitle, stats))
-        # text location will be set dynamically per event
-        ax.text(30000, -0.005, stats)
-        self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
-        self.figure.tight_layout()
-        del dfCopy
 
 
     # manipulate data per Autopro report
@@ -576,13 +495,8 @@ class AccConvertUi(QMainWindow):
         inputTxtFilePaths = sortTxtFiles(inputTxtFilePaths)
         self._txtFileCount = len(inputTxtFilePaths)
 
-        # move to separate function later?
-        #txtFileCount = len(inputTxtFilePaths)
-        #txtFilePositions = list(range(1, txtFileCount + 1))
-        #txtFileDict = dict(zip(txtFilePositions, inputTxtFilePaths))
-
-        # set self.plotDict
         self._setPlotDict(inputTxtFilePaths)
+
 
         for position, pathTitlePair in self.plotDict.items():
 
@@ -628,20 +542,10 @@ class AccConvertUi(QMainWindow):
 
             #stats = self._model.getStats('g')
 
-            self._plotFig('offset_g', 0.008, position, pathTitlePair[1])
+            self._results.createSubplot('offset_g', 0.008, position, pathTitlePair[1])
 
-            
-            #self._model.butterBandpassFilter()
-
-            #self._model.
-
-            #self._updatePlotDict()
-
-            # testing second set of plots (no need to show acc in m/s^2)
-            self._plotFig('acc_ms2', 0.05, position + 24, pathTitlePair[1])
-
-            #self.generalLayout.addWidget(self.figure)
-            self.show()
+            self._results.createSubplot('acc_ms2', 0.05, position + 24, pathTitlePair[1])
+            self._results.show()
 
 
     def _createSubmitButton(self):
@@ -653,76 +557,50 @@ class AccConvertUi(QMainWindow):
         self.generalLayout.addWidget(self.submitBtn)
 
 
+
 # Create canvas to display results by subclassing FigureCanvasQTAgg
-class ResultsCanvas(FigureCanvas):
-    def __init__(self, model, width=14, height=35, dpi=100):
+class ResultsCanvas(QMainWindow):
+    def __init__(self, model, width=14, height=20, dpi=100):
         
         #figure = Figure(figsize=(width, height), dpi=dpi, tight_layout={'w_pad': 0.25, 'h_pad': 0.25})
         self.figure = Figure(figsize=(width, height), dpi=dpi)
-        super().__init__(self.figure)
-        self.initUI()
+        #self.figure.tight_layout()
         self._model = model
-
-
-    def initUI(self):
-        
         #self.axes = figure.add_subplot(111)
         #self.axes.xaxis.set_major_locator(plt.MaxNLocator(4))
 
-        # since __init__() method of a parent class doesn't get
-        # called automatically, has to be called directly if
-        # we want to extend its functionality
-        #FigureCanvas.__init__(self, figure)
+        QMainWindow.__init__(self)
+        #FigureCanvas.__init__(self, self.figure)
+        #self.createSubplot()
 
-        #self.canvas = FigureCanvas(self.figure)
-
-        self.scrollArea = QScrollArea()
         self.widget = QWidget()
-        self.verticalLayout = QVBoxLayout()
+        self.setCentralWidget(self.widget)
+        self.vbox = QVBoxLayout()
+        self.widget.setLayout(self.vbox)
+        self.widget.layout().setContentsMargins(0,0,0,0)
+        self.widget.layout().setSpacing(0)
 
-        for i in range(1,50):
-            text = QLabel("TextLabel")
-            self.verticalLayout.addWidget(text)
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.draw()
 
-        #self.verticalLayout.addWidget(self.canvas)
+        self.scroll = QScrollArea(self.widget)
+        self.scroll.setWidget(self.canvas)
 
-        self.widget.setLayout(self.verticalLayout)
+        self.nav = NavigationToolbar(self.canvas, self.widget)
+        self.widget.layout().addWidget(self.nav)
+        self.widget.layout().addWidget(self.scroll)
 
-        #self.scrollAreaWidgetContents = QWidget(self.scrollArea)
-        self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scrollArea.setWidgetResizable(True)
-        self.scrollArea.setWidget(self.widget)
-        #self.scrollArea.setWidget(self.scrollAreaWidgetContents)
-         
-        self.setGeometry(600, 600, 1000, 900)
-        #self.show()       
-
-        #self.verticalLayoutScroll = QVBoxLayout(self.scrollAreaWidgetContents)
-        
-        return
-        #scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        #scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        #scroll.setWidget(self.canvas)
-        #self.nav = NavigationToolbar(self.canvas, self.widget)
-
-        #self.widget.layout().addWidget(self.nav)
-        #self.widget.layout().addWidget(scroll)
-        #self.plotFig()
-        #canvas.draw()
         #self.draw()
 
         #self._printPDF()
 
 
-    def plotFig(self, yData, yLimit, subplotPos, figTitle):
+    def createSubplot(self, yData, yLimit, subplotPos, figTitle):
         """
         Plot figure
         args:
         yData: string holding name of dataframe column to be plotted
-        yLimit: float holding abs value of max range to be shown on plot
         subplotPos: integer holding position of plot
-
         """
         ax = self.figure.add_subplot(16, 3, subplotPos)
         # y_lim values will be set dynamically per event
@@ -733,13 +611,14 @@ class ResultsCanvas(FigureCanvas):
         stats = getStats(dfCopy, yData)
         logging.debug('stats for {0}: {1}'.format(figTitle, stats))
         # text location will be set dynamically per event
-        ax.text(30000, -0.005, stats)
+        ax.text(20000, -0.005, stats)
         self._model.df.reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
         self.figure.tight_layout()
         del dfCopy
         #self.draw()
 
 
+    # might not be necessary
     def _printPDF(self):
         """Print results to pdf"""
         fn, _ = QFileDialog.getSaveFileName(
@@ -760,10 +639,10 @@ def main():
     convertacc = QApplication(sys.argv)
 
     model = AccConvertModel()
-    #results = ResultsCanvas(model)
+    results = ResultsCanvas(model)
     # Show the application's GUI
 
-    view = AccConvertUi(model)
+    view = AccConvertUi(model, results)
     
     view.show()
 
