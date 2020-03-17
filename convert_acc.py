@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QDialogButtonBox
 from PyQt5.QtWidgets import QFormLayout
 from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QErrorMessage
 
 from PyQt5.QtPrintSupport import QPrinter
 from PyQt5.QtGui import QPainter
@@ -54,6 +55,10 @@ General Notes:
 use camelCase throughout as Qt uses it
 remove unused imports leftover from calculator app
 """
+
+def convertTxtToDf(inputTxtFilePath):
+    """Convert given text file to pandas dataframe"""
+    return pd.read_csv(inputTxtFilePath, header=0)
 
 
 def sortTxtFiles(inputTxtFileList):
@@ -110,6 +115,7 @@ def printWidget(widget, filename):
     painter.end()
 
 
+
 # Create model used to access and convert data
 class AccConvertModel:
     def __init__(self):
@@ -133,7 +139,6 @@ class AccConvertModel:
 
     def getHeaderList(self):
         self.headerList = [item for item in list(self.df.columns.values)]
-        return self.headerList
 
 
     def getSensorCode(self):
@@ -396,35 +401,66 @@ class AccConvertUi(QMainWindow):
         self._createRadioButtons()
         self._createSubmitButton()
 
-        #self._txtFileCount = None
+        # Call other initial methods
+        self._getEventId()
+        self._getMiniseedDirPath()
+        self._getMiniseedFileInfo()
+        self._getDeviceDatasetCount()
+
+        self._getWorkingDir()
+        self._convertMiniseedToAscii()
+        self._setInputTxtFileInfo()
+
+
 
 
     def _getEventId(self):
         """Get user input (string) for event id field"""
-        print(self.eventField.text())
-        return self.eventField.text()
+        logging.debug(self.eventField.text())
+        self.eventId = self.eventField.text()
 
 
     def _getMiniseedDirPath(self):
         """Get user input (string) for miniseed directory path"""
-        return self.miniseedDirField.text()
+        self.miniseedDirPath = self.miniseedDirField.text()
 
 
-    # was in Model
-    def _convertMseedToAscii(self):
+    def _getMiniseedFileInfo(self):
+        """Get number of input miniseed files"""
+        self.miniseedFileList = [f for f in os.listdir(self.miniseedDirPath) if f.endswith(".m")]
+        self.miniseedFileCount = len(self.miniseedFileList)
+
+
+    def _getDeviceDatasetCount(self):
         """
-        convert all miniseed files in given dir to ascii files 
+        Get number of datasets per device. 
+        Assume number of input miniseed files to be 24 (if event falls in single hour) or 48 (if event spans two hours)
+        return: 1 if seismic event falls in single hour, 2 if spans two hours
+        """
+        if self.miniseedFileCount == 24:
+            return 1
+        elif self.miniseedFileCount == 48:
+            return 2
+        else:
+            inputCountErrorDialog = QErrorMessage()
+            inputCountErrorDialog.showMessage('Number of input files must be 24 or 48.')
+
+
+
+    # transferred from Model
+    def _convertMiniseedToAscii(self):
+        """
+        Convert all miniseed files in given dir to ascii files 
         args:
         mseed_dir_path_entry: instance of tkinter Entry class holding path of dir holding miniseed files entered by user
         working_dir_entry: string holding name of working directory for event (must be in timestamp form)
         ret: None
         """
-        self.miniseedDirPath = ""
-        self.miniseedDirPath = self._getMiniseedDirPath()
-        self.mseedFileList = [f for f in os.listdir(self.miniseedDirPath) if f.endswith(".m")]
+        
+        #self.miniseedDirPath = self._getMiniseedDirPath()
         self.workingDirPath = self._getWorkingDir()
         
-        for f in self.mseedFileList:
+        for f in self.miniseedFileList:
             self.basename = f.rsplit(".m")[0]
             self.filename = self.basename + ".txt"
             self.outPath = os.path.join(self.workingDirPath, self.filename)
@@ -434,15 +470,15 @@ class AccConvertUi(QMainWindow):
             subprocess.run(["./mseed2ascii", f, "-o", self.outPath])
 
 
-    # was in Model
+    # transferred from Model
     def _getWorkingDir(self):
         """
         If not yet created, create working dir using event id entered
         by user. return string holding path to working dir for event
         """
         
-        self.eventId = ""
-        self.eventId = self._getEventId()
+        #self.eventId = ""
+        #self.eventId = self._getEventId()
         # hard-coded for now
         self.workingBaseDir = "/home/grm/acc-data-conversion/working"
         self.workingDirPath = os.path.join(self.workingBaseDir, self.eventId)
@@ -486,25 +522,23 @@ class AccConvertUi(QMainWindow):
         self.generalLayout.addWidget(self.freqPlain)
 
 
-    def _convertTxtToDf(self, inputTxtFile):
-        """convert given text file to pandas dataframe"""
-        self.rawDf = pd.read_csv(inputTxtFile, header=0)
-        return self.rawDf
-
-
-    def _getInputTxtFilePaths(self):
-        """return list of input text file paths"""
-        return [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
+    def _setInputTxtFileInfo(self):
+        """Set list of input text file paths and number of text files"""
+        self._inputTxtFilePaths = [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
+        # may not need self._inputTxtFileCount
+        self._inputTxtFileCount = len(self._inputTxtFilePaths)
 
 
     def _setPlotDict(self, sortedTxtFilePaths):
         """
-        set dictionary with the following:
+        Set dictionary with the following:
         keys: positions (int) of plots
         values: tuple in form: (path, sensor codes with channels (used as subplot titles))
         """
         #txtFileCount = len(sortedTxtFilePaths)
-        txtFilePositions = list(range(1, self._txtFileCount + 1))
+        #txtFilePositions = list(range(1, self._inputTxtFileCount + 1))
+        # hardcoding number of plots to 24 for now
+        txtFilePositions = list(range(1, 25))
         figureTitles = [getSensorCodeWithChannel(path) for path in sortedTxtFilePaths]
         zippedPathsTitles = zip(sortedTxtFilePaths, figureTitles)
         self.plotDict = dict(zip(txtFilePositions, zippedPathsTitles))
@@ -514,13 +548,9 @@ class AccConvertUi(QMainWindow):
     # move code shared with other approaches to separate method later
     def _mainAutopro(self):
         logging.debug("mainAutopro run")
-        self._getWorkingDir()
-        self._convertMseedToAscii()
-        
-        inputTxtFilePaths = self._getInputTxtFilePaths()
-        inputTxtFilePaths = sortTxtFiles(inputTxtFilePaths)
-        self._txtFileCount = len(inputTxtFilePaths)
 
+        self._inputTxtFilePaths = sortTxtFiles(self._inputTxtFilePaths)
+        
         self._setPlotDict(inputTxtFilePaths)
 
 
@@ -530,8 +560,8 @@ class AccConvertUi(QMainWindow):
             #figureTitle = getSensorCodeWithChannel(file)
 
             # set model attributes
-            self._model.df = self._convertTxtToDf(pathTitlePair[0])
-            self._model.headerList = self._model.getHeaderList()
+            self._model.df = convertTxtToDf(pathTitlePair[0])
+            self._model.getHeaderList()
 
             logging.debug(self._model.df.head())
             logging.debug(self._model.headerList)
