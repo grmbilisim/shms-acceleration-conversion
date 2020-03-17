@@ -56,9 +56,16 @@ use camelCase throughout as Qt uses it
 remove unused imports leftover from calculator app
 """
 
-def convertTxtToDf(inputTxtFilePath):
-    """Convert given text file to pandas dataframe"""
-    return pd.read_csv(inputTxtFilePath, header=0)
+# move all helper functions into a public class?
+
+def getAllSensorCodesWithChannels():
+    sensorCodePrefixes = ['N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF']
+    axes = ['x', 'y', 'z']
+    allSensorCodesWithChannels = []
+    for p in sensorCodePrefixes:
+        for a in axes:
+            allSensorCodesWithChannels.append(p + a)
+    return allSensorCodesWithChannels
 
 
 def sortTxtFiles(inputTxtFileList):
@@ -75,10 +82,15 @@ def sortTxtFiles(inputTxtFileList):
     return sortedList
 
 
-# not to be confused with getSensorCode() in model class
+# not to be confused with _getSensorCode()
 def getSensorCodeWithChannel(inputTxtFile):
-    """Return string holding both sensor code and channel e.g. 'B4Fx'"""
+    """
+    Return string holding both sensor code and channel e.g. 'B4Fx'
+    args:
+    inputTxtFile: string holding either text filename or path 
+    """
     inputTxtFileBase = inputTxtFile.split('.txt')[0]
+    # info in filenames are separated by dots
     sensorCodeWithChannel = inputTxtFileBase.rsplit('.')[-1]
     return sensorCodeWithChannel
 
@@ -115,43 +127,38 @@ def printWidget(widget, filename):
     painter.end()
 
 
+class OrganizedDfFromTxtFile:
+    def __init__(self, txtFilePath):
+        self.txtFilePath = txtFilePath
+        #self.df = None
+        #self.headerList = None
+        #self.sensorCode = None
 
-# Create model used to access and convert data
-class AccConvertModel:
-    def __init__(self):
-        self.df = None
-        self.headerList = None
-        self.sensorCode = None
-        self.sensitivity = None
-
-        # these may be taken from user in future
-        # low cutoff frequency for bandpass and highpass filters
-        self.lowcut = 0.05
-        # high cutoff frequency for bandpass filter
-        self.highcut = 40
-        # sampling frequency
-        self.fs = 100
-        # order of filters
-        self.order = 2
-        # time between samples in seconds
-        self.dt = 1/float(self.fs)
+        self._convertTxtToDf()
+        self._getHeaderList()
+        self._getSensorCode()
+        self._getDfWithTimestampedCounts()
 
 
-    def getHeaderList(self):
+    def _convertTxtToDf(self):
+        """Convert given text file to pandas dataframe"""
+        self.df = pd.read_csv(inputTxtFilePath, header=0)
+
+
+    def _getHeaderList(self):
         self.headerList = [item for item in list(self.df.columns.values)]
 
 
-    def getSensorCode(self):
+    def _getSensorCode(self):
         """
-        return string holding sensor code for given df
+        Return string holding sensor code for given df
         (single sensor code exists for each input text file)
         """
         locationCode = [header for header in self.headerList if '__' in header][0]
         self.sensorCode = locationCode.split('__')[1]
-        return self.sensorCode
 
 
-    def getEarliestTimestamp(self):
+    def _getEarliestTimestamp(self):
         """
         get earliest pandas timestamp from among column headers 
         (which will contain either one or two timestamps)
@@ -173,7 +180,7 @@ class AccConvertModel:
             return earliestTs
 
 
-    def getCountColumnHeader(self):
+    def _getCountColumnHeader(self):
         """
         get column header that contains count values 
         """
@@ -188,7 +195,7 @@ class AccConvertModel:
                 return countHeader
 
 
-    def getDfWithTimestampedCounts(self):
+    def _getDfWithTimestampedCounts(self):
         """return clean dataframe with only timestamp and count columns"""
         startTime = self.getEarliestTimestamp()
         # time delta between entries: 0.01 s
@@ -205,7 +212,26 @@ class AccConvertModel:
         extraneousColumns = [header for header in self.headerList if header not in requiredColumns]
         for c in extraneousColumns:
             self.df.drop(c, axis=1, inplace=True)
-        return self.df
+
+
+
+# Create model used to access and convert data
+class AccConvertModel:
+    def __init__(self):
+        
+        self.sensitivity = None
+
+        # these may be taken from user in future
+        # low cutoff frequency for bandpass and highpass filters
+        self.lowcut = 0.05
+        # high cutoff frequency for bandpass filter
+        self.highcut = 40
+        # sampling frequency
+        self.fs = 100
+        # order of filters
+        self.order = 2
+        # time between samples in seconds
+        self.dt = 1/float(self.fs)
 
 
     def truncateDf(self, eventTimestamp):
@@ -412,8 +438,6 @@ class AccConvertUi(QMainWindow):
         self._setInputTxtFileInfo()
 
 
-
-
     def _getEventId(self):
         """Get user input (string) for event id field"""
         logging.debug(self.eventField.text())
@@ -431,17 +455,24 @@ class AccConvertUi(QMainWindow):
         self.miniseedFileCount = len(self.miniseedFileList)
 
 
-    def _getDeviceDatasetCount(self):
+    def _pairDeviceMiniseedFiles(self):
         """
-        Get number of datasets per device. 
+        If seismic event spans two hours, create list of 24 two-item lists holding path pairs of miniseed files to be processed.
         Assume number of input miniseed files to be 24 (if event falls in single hour) or 48 (if event spans two hours)
-        return: 1 if seismic event falls in single hour, 2 if spans two hours
         """
-        if self.miniseedFileCount == 24:
-            return 1
-        elif self.miniseedFileCount == 48:
-            return 2
-        else:
+        if self.miniseedFileCount == 48:
+            miniseedSensorCodeList = []
+            for file in self.miniseedFileList:
+                sensorCodeWithChannel = getSensorCodeWithChannel(file)
+                miniseedSensorCodeList.append((file, sensorCodeWithChannel))
+
+            self.pairedMiniseedList = []
+            allSensorCodesWithChannels = getAllSensorCodesWithChannels()
+            for c in allSensorCodesWithChannels:
+                pairedList = [f for f in miniseedSensorCodeList if c in f]
+                self.pairedMiniseedList.append(pairedList)
+
+        elif self.miniseedFileCount != 24:
             inputCountErrorDialog = QErrorMessage()
             inputCountErrorDialog.showMessage('Number of input files must be 24 or 48.')
 
