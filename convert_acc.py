@@ -1,6 +1,6 @@
-# Filename: convert_acc_qt.py
+# Filename: convert_acc.py
 
-"""Conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
+"""Visualization and conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
 
 import sys
 import os
@@ -48,20 +48,22 @@ __author__ = 'Nick LiBassi'
 ERROR_MSG = 'ERROR'
 
 # set logging to 'DEBUG' to print debug statements to console
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 """
 General Notes:
 use camelCase throughout as Qt uses it
 remove unused imports leftover from calculator app
+fix inconsistent use of '_' for private variables
 """
 
 # move all helper functions into a public class?
 
 def getAllSensorCodesWithChannels():
-    sensorCodePrefixes = ['N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF']
+    sensorCodePrefixes = ['N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F']
     axes = ['x', 'y', 'z']
-    allSensorCodesWithChannels = []
+    farFieldCodes = ['FFW', 'FFN', 'FFZ']
+    allSensorCodesWithChannels = [] + farFieldCodes
     for p in sensorCodePrefixes:
         for a in axes:
             allSensorCodesWithChannels.append(p + a)
@@ -82,17 +84,25 @@ def sortTxtFiles(inputTxtFileList):
     return sortedList
 
 
-# not to be confused with _getSensorCode()
-def getSensorCodeWithChannel(inputTxtFile):
+def getSensorCodeInfo(inputFile):
     """
-    Return string holding both sensor code and channel e.g. 'B4Fx'
+    Return strings holding sensor code only (ex. 'B4F') and sensor code with channel (ex. 'B4Fx')
+    In far field cases, these will be identical ('FFW', 'FFN', 'FFZ')
     args:
-    inputTxtFile: string holding either text filename or path 
+    inputFile: string holding either filename or path of .txt or .m file
     """
-    inputTxtFileBase = inputTxtFile.split('.txt')[0]
+    # get string holding file extension - either 'txt' or 'm' (without dot)
+    inputFileExt = inputFile.split('.')[-1]
+    inputFileBase = inputFile.split('.' + inputFileExt)[0]
     # info in filenames are separated by dots
-    sensorCodeWithChannel = inputTxtFileBase.rsplit('.')[-1]
-    return sensorCodeWithChannel
+    sensorCodeWithChannel = inputFileBase.rsplit('.')[-1]
+
+    lastLetter = sensorCodeWithChannel[-1]
+    if lastLetter.islower():
+        sensorCode = sensorCodeWithChannel[:-1]
+    else:
+        sensorCode = sensorCodeWithChannel
+    return sensorCode, sensorCodeWithChannel
 
 
 def getStats(df, columnName):
@@ -127,35 +137,26 @@ def printWidget(widget, filename):
     painter.end()
 
 
-class OrganizedDfFromTxtFile:
+class ProcessedFromTxtFile:
     def __init__(self, txtFilePath):
-        self.txtFilePath = txtFilePath
-        #self.df = None
-        #self.headerList = None
-        #self.sensorCode = None
+        self._txtFilePath = txtFilePath
+        self._df = None
+        self._headerList = None
+        self._sensorCode = getSensorCodeInfo(self._txtFilePath)[0]
 
         self._convertTxtToDf()
         self._getHeaderList()
-        self._getSensorCode()
+        #self._getSensorCode()
         self._getDfWithTimestampedCounts()
 
 
     def _convertTxtToDf(self):
         """Convert given text file to pandas dataframe"""
-        self.df = pd.read_csv(inputTxtFilePath, header=0)
+        self._df = pd.read_csv(self._txtFilePath, header=0)
 
 
     def _getHeaderList(self):
-        self.headerList = [item for item in list(self.df.columns.values)]
-
-
-    def _getSensorCode(self):
-        """
-        Return string holding sensor code for given df
-        (single sensor code exists for each input text file)
-        """
-        locationCode = [header for header in self.headerList if '__' in header][0]
-        self.sensorCode = locationCode.split('__')[1]
+        self._headerList = [item for item in list(self._df.columns.values)]
 
 
     def _getEarliestTimestamp(self):
@@ -165,7 +166,7 @@ class OrganizedDfFromTxtFile:
         """
         # create empty timestamp list
         tsList = []
-        for item in self.headerList:
+        for item in self._headerList:
             try:
                 ts = pd.Timestamp(item)
                 tsList.append(ts)
@@ -185,8 +186,8 @@ class OrganizedDfFromTxtFile:
         get column header that contains count values 
         """
         countHeader = None
-        for header in self.headerList:
-            firstVal = self.df[header][0]
+        for header in self._headerList:
+            firstVal = self._df[header][0]
             logging.debug('{0}:{1}'.format(header, firstVal))
             if firstVal is not None:
                 logging.debug(firstVal)
@@ -197,7 +198,7 @@ class OrganizedDfFromTxtFile:
 
     def _getDfWithTimestampedCounts(self):
         """return clean dataframe with only timestamp and count columns"""
-        startTime = self.getEarliestTimestamp()
+        startTime = self._getEarliestTimestamp()
         # time delta between entries: 0.01 s
         timeDelta = pd.Timedelta('0 days 00:00:00.01000')
         # time delta of entire file - 1 hour minus  0.01 s
@@ -206,12 +207,12 @@ class OrganizedDfFromTxtFile:
         # create timestamp series
         timestampSeries = pd.Series(pd.date_range(start=startTime, end=endTime, freq=timeDelta))
         # add new columns to dataframe
-        self.df['count'] = self.df[self.getCountColumnHeader()]
-        self.df['timestamp'] = timestampSeries
+        self._df['count'] = self._df[self._getCountColumnHeader()]
+        self._df['timestamp'] = timestampSeries
         requiredColumns = ['timestamp', 'count']
-        extraneousColumns = [header for header in self.headerList if header not in requiredColumns]
+        extraneousColumns = [header for header in self._headerList if header not in requiredColumns]
         for c in extraneousColumns:
-            self.df.drop(c, axis=1, inplace=True)
+            self._df.drop(c, axis=1, inplace=True)
 
 
 
@@ -219,7 +220,9 @@ class OrganizedDfFromTxtFile:
 class AccConvertModel:
     def __init__(self):
         
+        self.df = None
         self.sensitivity = None
+        self.sensorCode = None
 
         # these may be taken from user in future
         # low cutoff frequency for bandpass and highpass filters
@@ -412,6 +415,19 @@ class AccConvertUi(QMainWindow):
         self._model = model
         # results will be shown in second window
         self._results = results
+
+        self.eventId = None
+        self.miniseedDirPath = None
+        self.miniseedFileList = None
+        self.miniseedFileCount = None
+        self.pairedMiniseedList = []
+        self.workingBaseDir = "/home/grm/acc-data-conversion/working"
+        self.workingDirPath = None
+        self._inputTxtFilePaths = None
+        self._inputTxtFileCount = None
+        self.plotDict = None
+        self.processed1 = None
+        self.df1 = None
         
         # Set some of main window's properties
         self.setWindowTitle('Accelerometer Data Conversion')
@@ -427,16 +443,6 @@ class AccConvertUi(QMainWindow):
         self._createRadioButtons()
         self._createSubmitButton()
 
-        # Call other initial methods
-        self._getEventId()
-        self._getMiniseedDirPath()
-        self._getMiniseedFileInfo()
-        self._getDeviceDatasetCount()
-
-        self._getWorkingDir()
-        self._convertMiniseedToAscii()
-        self._setInputTxtFileInfo()
-
 
     def _getEventId(self):
         """Get user input (string) for event id field"""
@@ -449,7 +455,7 @@ class AccConvertUi(QMainWindow):
         self.miniseedDirPath = self.miniseedDirField.text()
 
 
-    def _getMiniseedFileInfo(self):
+    def _setMiniseedFileInfo(self):
         """Get number of input miniseed files"""
         self.miniseedFileList = [f for f in os.listdir(self.miniseedDirPath) if f.endswith(".m")]
         self.miniseedFileCount = len(self.miniseedFileList)
@@ -463,10 +469,12 @@ class AccConvertUi(QMainWindow):
         if self.miniseedFileCount == 48:
             miniseedSensorCodeList = []
             for file in self.miniseedFileList:
-                sensorCodeWithChannel = getSensorCodeWithChannel(file)
+                sensorCodeWithChannel = getSensorCodeInfo(file)[1]
                 miniseedSensorCodeList.append((file, sensorCodeWithChannel))
 
-            self.pairedMiniseedList = []
+            for t in miniseedSensorCodeList:
+                logging.debug('miniseedSensorCodeList tuple: {}'.format(t))
+
             allSensorCodesWithChannels = getAllSensorCodesWithChannels()
             for c in allSensorCodesWithChannels:
                 pairedList = [f for f in miniseedSensorCodeList if c in f]
@@ -476,6 +484,24 @@ class AccConvertUi(QMainWindow):
             inputCountErrorDialog = QErrorMessage()
             inputCountErrorDialog.showMessage('Number of input files must be 24 or 48.')
 
+
+    # transferred from Model
+    def _setWorkingDir(self):
+        """
+        If not yet created, create working dir using event id entered
+        by user. return string holding path to working dir for event
+        """
+        
+        #self.eventId = ""
+        #self.eventId = self._getEventId()
+        # hard-coded for now
+        
+        self.workingDirPath = os.path.join(self.workingBaseDir, self.eventId)
+
+        if not os.path.isdir(self.workingDirPath):
+            os.mkdir(self.workingDirPath)
+        
+        return self.workingDirPath
 
 
     # transferred from Model
@@ -489,7 +515,7 @@ class AccConvertUi(QMainWindow):
         """
         
         #self.miniseedDirPath = self._getMiniseedDirPath()
-        self.workingDirPath = self._getWorkingDir()
+        self.workingDirPath = self._setWorkingDir()
         
         for f in self.miniseedFileList:
             self.basename = f.rsplit(".m")[0]
@@ -501,25 +527,6 @@ class AccConvertUi(QMainWindow):
             subprocess.run(["./mseed2ascii", f, "-o", self.outPath])
 
 
-    # transferred from Model
-    def _getWorkingDir(self):
-        """
-        If not yet created, create working dir using event id entered
-        by user. return string holding path to working dir for event
-        """
-        
-        #self.eventId = ""
-        #self.eventId = self._getEventId()
-        # hard-coded for now
-        self.workingBaseDir = "/home/grm/acc-data-conversion/working"
-        self.workingDirPath = os.path.join(self.workingBaseDir, self.eventId)
-
-        if not os.path.isdir(self.workingDirPath):
-            os.mkdir(self.workingDirPath)
-        
-        return self.workingDirPath
-
-        
     def _createTextInputFields(self):
         """Create text input fields"""
         self.eventLabel = QLabel(self)
@@ -556,8 +563,11 @@ class AccConvertUi(QMainWindow):
     def _setInputTxtFileInfo(self):
         """Set list of input text file paths and number of text files"""
         self._inputTxtFilePaths = [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
+        self._inputTxtFilePaths = sortTxtFiles(self._inputTxtFilePaths)
         # may not need self._inputTxtFileCount
         self._inputTxtFileCount = len(self._inputTxtFilePaths)
+        for path in self._inputTxtFilePaths:
+            logging.debug(path)
 
 
     def _setPlotDict(self, sortedTxtFilePaths):
@@ -570,38 +580,74 @@ class AccConvertUi(QMainWindow):
         #txtFilePositions = list(range(1, self._inputTxtFileCount + 1))
         # hardcoding number of plots to 24 for now
         txtFilePositions = list(range(1, 25))
-        figureTitles = [getSensorCodeWithChannel(path) for path in sortedTxtFilePaths]
+        # need exactly 24 figureTitles but may have 48 sortedTxtFilePaths
+        if self._inputTxtFileCount == 48:
+            sortedTxtFilePaths = sortedTxtFilePaths[:24]
+        figureTitles = [getSensorCodeInfo(path)[1] for path in sortedTxtFilePaths]
+        # if self._inputTxtFileCount == 48, zippedPathsTitles only has path to first text file
         zippedPathsTitles = zip(sortedTxtFilePaths, figureTitles)
         self.plotDict = dict(zip(txtFilePositions, zippedPathsTitles))
+        try:
+            for k, v in self.plotDict:
+                logging.debug('key: {0}, value: {1}'.format(k, v))
+        except Exception as e:
+            print(e)
+
+
+    def _setModelDf(self, pathTitlePair):
+        """
+        Set model dataframe for given set(s) of acceleration data. Either one or two text files will be used as input.
+        args:
+        pathTitlePair: tuple in following form (input text file path (string), figure titles (string. ex: 'N39x'))
+        """
+        self.processed1 = ProcessedFromTxtFile(pathTitlePair[0])
+        self.df1 = self.processed1._df
+        logging.debug('df1 head: {0}'.format(df1.head()))
+        self._model.df = self.df1
+        logging.debug('INPUT TEXT FILE COUNT: {0}'.format(self._inputTxtFileCount))
+
+        if self._inputTxtFileCount == 48:
+            for sublist in self.pairedMiniseedList:
+                for item in sublist:
+                    logging.debug('pairedMiniseedList sublist item: {0}'.format(item))
+                logging.debug('\n')
+                # if title is in sublist assign that sublist's second item to secondTxtFilePath
+                if pathTitlePair[1] in sublist:
+                    secondTxtFilePath = sublist[1]
+                    logging.debug('second txt file path: {0}'.format(secondTxtFilePath))
+                    processed2 = ProcessedFromTxtFile(secondTxtFilePath)
+                    df2 = processed2._df
+                    logging.debug('df2 head: {0}'.format(df2.head()))
+                    self._model.df = pd.concat([self.df1, df2], axis=0)
+
+        #elif self._inputTxtFileCount == 24:
+            #self._model.df = df1
+
+        logging.debug('len of current df: {0}'.format(len(self._model.df)))
+        logging.debug('combined df head: {0}'.format(self._model.df.head()))
+        
+
+    def _processUserInput(self):
+        self._getEventId()
+        self._getMiniseedDirPath()
+        self._setMiniseedFileInfo()
+        self._pairDeviceMiniseedFiles()
+        self._setWorkingDir()
+        self._convertMiniseedToAscii()
+        self._setInputTxtFileInfo()
+        self._setPlotDict(self._inputTxtFilePaths)
+        self._model.sensorCode = self.processed1._sensorCode
 
 
     # manipulate data per Autopro report
-    # move code shared with other approaches to separate method later
+    # move code shared with other approaches to separate method (or decorator) later
     def _mainAutopro(self):
         logging.debug("mainAutopro run")
 
-        self._inputTxtFilePaths = sortTxtFiles(self._inputTxtFilePaths)
-        
-        self._setPlotDict(inputTxtFilePaths)
-
+        self._processUserInput()
 
         for position, pathTitlePair in self.plotDict.items():
-
-            # make this attribute of view class?
-            #figureTitle = getSensorCodeWithChannel(file)
-
-            # set model attributes
-            self._model.df = convertTxtToDf(pathTitlePair[0])
-            self._model.getHeaderList()
-
-            logging.debug(self._model.df.head())
-            logging.debug(self._model.headerList)
-
-            testSensorCode = self._model.getSensorCode()
-            logging.debug(testSensorCode)
-
-            self._model.getDfWithTimestampedCounts()
-            logging.debug(self._model.df.head())
+            self._setModelDf(pathTitlePair)
 
             self._model.truncateDf(self.eventId)
             logging.debug(self._model.df.head())
