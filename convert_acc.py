@@ -48,40 +48,75 @@ __author__ = 'Nick LiBassi'
 ERROR_MSG = 'ERROR'
 
 # set logging to 'DEBUG' to print debug statements to console
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 """
 General Notes:
 use camelCase throughout as Qt uses it
 remove unused imports leftover from calculator app
+
 fix inconsistent use of '_' for private variables
+fix inconsisent use of sensor code naming (prefixes, sensorCode, sensorCodeWithChannel)
 """
 
 # move all helper functions into a public class?
 
+SENSOR_CODES = ('N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF')
+
+
 def getAllSensorCodesWithChannels():
-    sensorCodePrefixes = ['N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F']
+    buildingSensorCodes = [c for c in SENSOR_CODES if c != 'FF']
     axes = ['x', 'y', 'z']
     farFieldCodes = ['FFW', 'FFN', 'FFZ']
     allSensorCodesWithChannels = [] + farFieldCodes
-    for p in sensorCodePrefixes:
+    for p in buildingSensorCodes:
         for a in axes:
             allSensorCodesWithChannels.append(p + a)
     return allSensorCodesWithChannels
 
 
-def sortTxtFiles(inputTxtFileList):
+def getTimeText(inputFile):
     """
-    Sort given text files according to Safe report.
-    (may need to be modified later for events that span two hours)
+    Get hour (int) and full timestamp (string) from given miniseed or text file name.
+    args:
+    inputFile: string holding either filename or path of .txt or .m file
+    return:
+    tuple in form: (int holding hour between 0-23, string holding full timestamp)
+    ex. (10, '20190926100000')
     """
+    filename = inputFile.split('/')[-1]
+    timestampText = filename.split('.')[0]
+    UTCHour = timestampText[8:10]
+    return (UTCHour, timestampText)
+
+
+def sortFilesBySensorCode(inputFileList):
     sortedList = []
-    sensorCodePrefixes = ['N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF']
-    for prefix in sensorCodePrefixes:
-        fileGroup = [f for f in inputTxtFileList if prefix in f]
+    for code in SENSOR_CODES:
+        fileGroup = [f for f in inputFileList if code in f]
         sortedFileGroup = sorted(fileGroup)
         sortedList += sortedFileGroup
     return sortedList
+
+
+def sortFiles(inputFileList):
+    """
+    Sort given list of (text or miniseed) files (paths or names) according to Safe report.
+    
+    return: sorted list of input text files
+    """
+    uniqueTimeTuples = list(set([getTimeText(file) for file in inputFileList]))
+    numHours = len(uniqueTimeTuples)
+    if numHours == 1:
+        return sortFilesBySensorCode(inputFileList)
+    elif numHours == 2:
+        if uniqueTimeTuples[0][0] < uniqueTimeTuples[1][0]:
+            firstTime = uniqueTimeTuples[0][1]
+        else:
+            firstTime = uniqueTimeTuples[1][1]
+        firstFileList = sortFilesBySensorCode([f for f in inputFileList if firstTime in f])
+        secondFileList = sortFilesBySensorCode([f for f in inputFileList if firstTime not in f])
+        return firstFileList + secondFileList
 
 
 def getSensorCodeInfo(inputFile):
@@ -102,6 +137,7 @@ def getSensorCodeInfo(inputFile):
         sensorCode = sensorCodeWithChannel[:-1]
     else:
         sensorCode = sensorCodeWithChannel
+
     return sensorCode, sensorCodeWithChannel
 
 
@@ -143,7 +179,7 @@ class ProcessedFromTxtFile:
         self._df = None
         self._headerList = None
         self._sensorCode = getSensorCodeInfo(self._txtFilePath)[0]
-
+        logging.debug('sensor code: {0}, for path: {1}'.format(self._sensorCode, self._txtFilePath))
         self._convertTxtToDf()
         self._getHeaderList()
         #self._getSensorCode()
@@ -265,8 +301,9 @@ class AccConvertModel:
         return float holding sensitivity in V/g based
         on first few letters of given sensorCode
         """
-        groundFloorSensorCodes = ['B4F', 'FF']
-        upperFloorSensorCodes = ['S12', 'N12', 'S24', 'N24', 'S39', 'N39']
+
+        groundFloorSensorCodes = [c for c in SENSOR_CODES if c.endswith('F')]
+        upperFloorSensorCodes = [c for c in SENSOR_CODES if not c.endswith('F')]
         for code in groundFloorSensorCodes:
             if self.sensorCode.startswith(code):
                 self.sensitivity = 1.25
@@ -561,9 +598,9 @@ class AccConvertUi(QMainWindow):
 
 
     def _setInputTxtFileInfo(self):
-        """Set list of input text file paths and number of text files"""
+        """Set list of sorted input text file paths and number of text files"""
         self._inputTxtFilePaths = [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
-        self._inputTxtFilePaths = sortTxtFiles(self._inputTxtFilePaths)
+        self._inputTxtFilePaths = sortFiles(self._inputTxtFilePaths)
         # may not need self._inputTxtFileCount
         self._inputTxtFileCount = len(self._inputTxtFilePaths)
         for path in self._inputTxtFilePaths:
@@ -587,8 +624,9 @@ class AccConvertUi(QMainWindow):
         # if self._inputTxtFileCount == 48, zippedPathsTitles only has path to first text file
         zippedPathsTitles = zip(sortedTxtFilePaths, figureTitles)
         self.plotDict = dict(zip(txtFilePositions, zippedPathsTitles))
+        logging.debug('plot dict set')
         try:
-            for k, v in self.plotDict:
+            for k, v in self.plotDict.items():
                 logging.debug('key: {0}, value: {1}'.format(k, v))
         except Exception as e:
             print(e)
@@ -601,8 +639,9 @@ class AccConvertUi(QMainWindow):
         pathTitlePair: tuple in following form (input text file path (string), figure titles (string. ex: 'N39x'))
         """
         self.processed1 = ProcessedFromTxtFile(pathTitlePair[0])
+        logging.debug('text file processed for {0}'.format(pathTitlePair[0]))
         self.df1 = self.processed1._df
-        logging.debug('df1 head: {0}'.format(df1.head()))
+        logging.debug('df1 head: {0}'.format(self.df1.head()))
         self._model.df = self.df1
         logging.debug('INPUT TEXT FILE COUNT: {0}'.format(self._inputTxtFileCount))
 
@@ -636,8 +675,7 @@ class AccConvertUi(QMainWindow):
         self._convertMiniseedToAscii()
         self._setInputTxtFileInfo()
         self._setPlotDict(self._inputTxtFilePaths)
-        self._model.sensorCode = self.processed1._sensorCode
-
+        
 
     # manipulate data per Autopro report
     # move code shared with other approaches to separate method (or decorator) later
@@ -648,6 +686,7 @@ class AccConvertUi(QMainWindow):
 
         for position, pathTitlePair in self.plotDict.items():
             self._setModelDf(pathTitlePair)
+            self._model.sensorCode = self.processed1._sensorCode
 
             self._model.truncateDf(self.eventId)
             logging.debug(self._model.df.head())
@@ -669,24 +708,32 @@ class AccConvertUi(QMainWindow):
             logging.debug(self._model.df.head())
             logging.debug(self._model.df.tail())
 
-            logging.debug(self._model.getHeaderList())
+            # get header list from elsewhere if necessary (model no longer has getHeaderList())
+            #logging.debug(self._model.getHeaderList())
 
-            #stats = self._model.getStats('g')
+            stats_offset_g = getStats(self._model.df, 'offset_g')
+            logging.info('offset g stats: {}'.format(stats_offset_g))
 
             # plot acceleration
-            self._results.createSubplot('offset_g', 0.008, position, pathTitlePair[1])
+            self._results.createSubplot('offset_g', 0.04, position, pathTitlePair[1])
 
             # get 'bandpassed_g' and 'bandpassed_ms2'
             self._model.butterBandpassFilter()
 
             self._model.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
 
+            stats_vel = getStats(self._model.df, 'velocity_ms')
+            logging.info('velocity stats: {}'.format(stats_vel))
+
             self._model.detrendData('velocity_ms', 'detrended_velocity_ms')
+
+            stats_detrended_vel = getStats(self._model.df, 'detrended_velocity_ms')
+            logging.info('detrended velocity stats: {}'.format(stats_detrended_vel))
 
             #self._model.removeZeropad()
 
             # plot velocity
-            self._results.createSubplot('detrended_velocity_ms', 0.005, position + 24, pathTitlePair[1])
+            self._results.createSubplot('detrended_velocity_ms', 0.02, position + 24, pathTitlePair[1])
             
             
             # add displacement
@@ -696,8 +743,11 @@ class AccConvertUi(QMainWindow):
 
             self._model.df['detrended_displacement_cm'] = self._model.df['detrended_displacement_m'] * 100
 
+            stats_detrended_disp = getStats(self._model.df, 'detrended_displacement_m')
+            logging.info('detrended displacement stats: {}'.format(stats_detrended_disp))
+
             # plot displacement
-            self._results.createSubplot('detrended_displacement_cm', 0.001, position + 48, pathTitlePair[1])
+            self._results.createSubplot('detrended_displacement_cm', 0.005, position + 48, pathTitlePair[1])
             
             self._results.show()
 
