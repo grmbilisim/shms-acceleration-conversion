@@ -275,7 +275,7 @@ class AccConvertModel:
 
     def truncateDf(self, eventTimestamp):
         """
-        return truncated dataframe based timestamp for known time event
+        return truncated dataframe based on timestamp for known time event
         args: 
         eventTimestamp: string holding timestamp (same as event dir name) 
         in format: '2020-01-13T163712'
@@ -284,10 +284,12 @@ class AccConvertModel:
         """
         # convert string timestamp to pandas Timestamp instance
         eventTimestamp = pd.Timestamp(eventTimestamp)
-        # convert timestamp from local Turkish time to UTC-3
+        # convert timestamp from local Turkish time to UTC
         eventTimestamp = eventTimestamp - pd.Timedelta('3 hours')
         startTime = eventTimestamp - pd.Timedelta('1 minute')
+        logging.info('start time: {}'.format(startTime))
         endTime = startTime + pd.Timedelta('400 seconds')
+        logging.info('end time: {}'.format(endTime))
 
         # see caveats in pandas docs on this!!
         self.df = self.df.loc[(self.df['timestamp'] > startTime) & (self.df['timestamp'] <= endTime)]
@@ -298,10 +300,9 @@ class AccConvertModel:
 
     def getSensitivity(self):
         """
-        return float holding sensitivity in V/g based
-        on first few letters of given sensorCode
+        return float holding sensitivity in V/g based on sensorCode
         """
-
+        # CHECK AUTOPRO REPORT ON THIS - FF SHOULD GET SAME AS GROUND FLOOR
         groundFloorSensorCodes = [c for c in SENSOR_CODES if c.endswith('F')]
         upperFloorSensorCodes = [c for c in SENSOR_CODES if not c.endswith('F')]
         for code in groundFloorSensorCodes:
@@ -715,8 +716,10 @@ class AccConvertUi(QMainWindow):
             logging.info('offset g stats: {}'.format(stats_offset_g))
 
             # plot acceleration
-            self._results.createSubplot('offset_g', 0.04, position, pathTitlePair[1])
+            self._results.createSubplot('offset_g', 0.06, position, pathTitlePair[1])
 
+
+            '''
             # get 'bandpassed_g' and 'bandpassed_ms2'
             self._model.butterBandpassFilter()
 
@@ -748,7 +751,7 @@ class AccConvertUi(QMainWindow):
 
             # plot displacement
             self._results.createSubplot('detrended_displacement_cm', 0.005, position + 48, pathTitlePair[1])
-            
+            '''
             self._results.show()
 
 
