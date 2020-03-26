@@ -346,16 +346,17 @@ class Conversion:
         self.getStats('offset_g')
         #self.plotGraph(self.df, 'offset_g', 'acceleration offset g')
         #self.plotGraph(self.df, 'acc_ms2', 'acceleration ms2')
-        self.accStats = self.getStats('acc_ms2')
         self.butterBandpassFilter(self.df, 'offset_g', 'bandpassed_g')
         self.butterBandpassFilter(self.df, 'acc_ms2', 'bandpassed_ms2')
+        self.accStats = self.getStats('bandpassed_g')
         self.plotGraph(self.df, 'bandpassed_g', 'bandpassed acceleration (g)')
         #self.plotGraph(self.df, 'bandpassed_ms2', 'bandpassed acceleration (m/s2)')
         self.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
         #self.plotGraph(self.df, 'velocity_ms', 'uncorrected velocity')
         self.detrendData('velocity_ms', 'detrended_velocity_ms')
-        self.velStats = self.getStats('detrended_velocity_ms')
-        self.plotGraph(self.df, 'detrended_velocity_ms', 'detrended velocity (m/s)')
+        self.convertMToCm(self.df, 'detrended_velocity_ms', 'detrended_velocity_cms')
+        self.velStats = self.getStats('detrended_velocity_cms')
+        self.plotGraph(self.df, 'detrended_velocity_cms', 'detrended velocity (cm/s)')
         self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
         #self.plotGraph(self.df, 'displacement_m', 'uncorrected displacement')
         self.detrendData('displacement_m', 'detrended_displacement_m')
@@ -569,8 +570,7 @@ class Conversion:
         columnName: string holding name of column in self.df
         return: tuple holding:
             1. string holding max and min (to be printed to console or on plots)
-            2. string holding columnName
-            3. float holding peak value
+            2. float holding peak value
         """
 
         minVal = round(self.df.iloc[5000:40500][columnName].min(), 5)
@@ -588,7 +588,7 @@ class Conversion:
         logging.info('min val indexes: {0}'.format(minValIndexList))
         logging.info('max val indexes: {0}'.format(maxValIndexList))
 
-        return (stats, columnName, peakVal)
+        return (stats, peakVal)
 
 
 # table holding peak values for acceleration, velocity, and displacement for each
@@ -599,17 +599,18 @@ class StatsTable:
         self.df = pd.DataFrame(columns=self.columnHeaders)
         self.df['ID'] = getAllSensorCodesWithChannels()
         # self.columnDict maps columns names of df from Conversion object to column names of df in StatsTable object 
-        self.columnDict = {'bandpassed_g': 'acc_g', 'velocity_cms': 'vel_cm_s', 'highpassed_displacement_cm'}
+        # may not need this anymore
+        self.columnDict = {'bandpassed_g': 'acc_g', 'velocity_cms': 'vel_cm_s', 'highpassed_displacement_cm': 'disp_cm'}
 
 
-    def updateStatsDf(self, sensorCodeWithChannel, conversionColumnName, value):
+    def updateStatsDf(self, sensorCodeWithChannel, statsColumnName, value):
         """
         update stats dataframe where 'ID' equals sensorCodeWithChannel
         sensorCodeWithChannel: string holding sensor code with channel (from Conversion object)
-        conversionColumnName: string holding column name of dataframe from Conversion object
+        statsColumnName: string holding name of stats table dataframe column to be updated
         value: value to be set in statsDf (will come from stats of Conversion object)
         """
-        statsColumnName = self.columnDict[conversionColumnName]
+        #statsColumnName = self.columnDict[conversionColumnName]
         self.df.loc[self.df['ID'] == sensorCodeWithChannel, statsColumnName] = value
         
 
@@ -635,8 +636,13 @@ def main():
             df2 = p2.df
             df = pd.concat([df1, df2])
             c = Conversion(df, sensorCode, p1.sensorCodeWithChannel, ip.eventTimestamp)
-            columnName, peakVal = c.getStats()
-            st.updateStatsDf()
+            
+            accPeakVal = c.accStats[1]
+            velPeakVal = c.velStats[1]
+            dispPeakVal = c.dispStats[1]
+            st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g', accPeakVal)
+            st.updateStatsDf(c.sensorCodeWithChannel, 'vel_cm_s', velPeakVal)
+            st.updateStatsDf(c.sensorCodeWithChannel, 'disp_cm', dispPeakVal)
 
     else:
         for txtFile in ip.txtFileList:
@@ -644,6 +650,12 @@ def main():
             df = p.df
             c = Conversion(df, df.sensorCode, p.sensorCodeWithChannel, ip.eventTimestamp)
 
+            # create function from stats portion above and call here
+
+
+    print(st.df)
+    statsDfCsvPath = '/home/grm/acc-data-conversion/working/no_ui/' + ip.eventTimestamp + '.csv'
+    st.df.to_csv(statsDfCsvPath)
 
     # Create an instance of QApplication
     #convertacc = QApplication(sys.argv)
