@@ -2,6 +2,8 @@
 
 """Visualization and conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
 
+"""Attempt to create unpadded df for plotting and stats but not working"""
+
 import sys
 import os
 import subprocess
@@ -355,24 +357,28 @@ class Conversion:
         self.accStats = self.getStats('bandpassed_g')
         self.plotGraph(self.df, 'bandpassed_g', 'bandpassed acceleration (g)')
         #self.plotGraph(self.df, 'bandpassed_ms2', 'bandpassed acceleration (m/s2)')
+
         self.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
         #self.plotGraph(self.df, 'velocity_ms', 'uncorrected velocity')
+        print(self.df.head())
+        self.createUnpaddedDf()
+        print(self.unpaddedDf.head())
 
-        self.plotGraph(self.df, 'velocity_ms', 'velocity (m/s) - uncorrected')
+        self.plotGraph(self.unpaddedDf, 'velocity_ms', 'velocity (m/s) - uncorrected')
 
-        self.detrendData(self.df, 'velocity_ms', 'detrended_velocity_ms')
+        self.detrendData(self.unpaddedDf, 'velocity_ms', 'detrended_velocity_ms')
 
-        self.convertMToCm(self.df, 'detrended_velocity_ms', 'detrended_velocity_cms')
+        self.convertMToCm(self.unpaddedDf, 'detrended_velocity_ms', 'detrended_velocity_cms')
         self.velStats = self.getStats('detrended_velocity_cms')
-        self.plotGraph(self.df, 'detrended_velocity_cms', 'detrended velocity (cm/s)')
+        self.plotGraph(self.unpaddedDf, 'detrended_velocity_cms', 'detrended velocity (cm/s)')
         self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
         #self.plotGraph(self.df, 'displacement_m', 'uncorrected displacement')
-        self.detrendData(self.df, 'displacement_m', 'detrended_displacement_m')
+        self.detrendData(self.unpaddedDf, 'displacement_m', 'detrended_displacement_m')
         #self.plotGraph(self.df, 'detrended_displacement_m', 'detrended displacement')
-        self.butterHighpassFilter(self.df, 'detrended_displacement_m', 'highpassed_displacement_m')
+        self.butterHighpassFilter(self.unpaddedDf, 'detrended_displacement_m', 'highpassed_displacement_m')
         #self.plotGraph(self.df, 'highpassed_displacement_m', 'highpassed displacement m')
-        self.convertMToCm(self.df, 'highpassed_displacement_m', 'highpassed_displacement_cm')
-        self.plotGraph(self.df, 'highpassed_displacement_cm', 'highpassed displacement (cm)')
+        self.convertMToCm(self.unpaddedDf, 'highpassed_displacement_m', 'highpassed_displacement_cm')
+        self.plotGraph(self.unpaddedDf, 'highpassed_displacement_cm', 'highpassed displacement (cm)')
         #getStats(self.df, 'highpassed_displacement_cm', ignoreHeadVal=5000)
         self.dispStats = self.getStats('highpassed_displacement_cm')
         
@@ -515,7 +521,7 @@ class Conversion:
         
         
     def createUnpaddedDf(self):
-        self.unpaddedDf = self.df.iloc[500:40500].reset_index()
+        self.unpaddedDf = self.df.iloc[self.ignoredSamples:40500].reset_index()
         
         
     def detrendData(self, df, inputColumn, outputColumn):

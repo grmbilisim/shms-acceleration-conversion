@@ -2,6 +2,8 @@
 
 """Visualization and conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
 
+"""Attempt to clip df in Conversion class for plotting and stats"""
+
 import sys
 import os
 import subprocess
@@ -325,6 +327,9 @@ class Conversion:
         self.velStats = None
         self.dispStats = None
 
+        # int holding number of samples to ignore when plotting and getting stats
+        self.ignoredSamples = 6000
+
         # these may be taken from user in future
         # low cutoff frequency for bandpass and highpass filters
         self.lowcut = 0.05
@@ -341,25 +346,34 @@ class Conversion:
         self.getSensitivity()
         self.convertCountToG()
         self.addZeroPad()
+        #self.plotGraph(self.df, 'g', 'raw g')
         self.convertGToOffsetG()
         self.convertGToMetric()
         self.getStats('offset_g')
-        #self.plotGraph(self.df, 'offset_g', 'acceleration offset g')
+        self.plotGraph(self.df, 'offset_g', 'acceleration offset g')
         #self.plotGraph(self.df, 'acc_ms2', 'acceleration ms2')
         self.butterBandpassFilter(self.df, 'offset_g', 'bandpassed_g')
         self.butterBandpassFilter(self.df, 'acc_ms2', 'bandpassed_ms2')
         self.accStats = self.getStats('bandpassed_g')
         self.plotGraph(self.df, 'bandpassed_g', 'bandpassed acceleration (g)')
         #self.plotGraph(self.df, 'bandpassed_ms2', 'bandpassed acceleration (m/s2)')
+
         self.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
         #self.plotGraph(self.df, 'velocity_ms', 'uncorrected velocity')
-        self.detrendData('velocity_ms', 'detrended_velocity_ms')
+        #print(self.df.head())
+        #self.clipDf()
+        #print(self.unpaddedDf.head())
+
+        self.plotGraph(self.df, 'velocity_ms', 'velocity (m/s) - uncorrected')
+
+        self.detrendData(self.df, 'velocity_ms', 'detrended_velocity_ms')
+
         self.convertMToCm(self.df, 'detrended_velocity_ms', 'detrended_velocity_cms')
         self.velStats = self.getStats('detrended_velocity_cms')
         self.plotGraph(self.df, 'detrended_velocity_cms', 'detrended velocity (cm/s)')
         self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
         #self.plotGraph(self.df, 'displacement_m', 'uncorrected displacement')
-        self.detrendData('displacement_m', 'detrended_displacement_m')
+        self.detrendData(self.df, 'displacement_m', 'detrended_displacement_m')
         #self.plotGraph(self.df, 'detrended_displacement_m', 'detrended displacement')
         self.butterHighpassFilter(self.df, 'detrended_displacement_m', 'highpassed_displacement_m')
         #self.plotGraph(self.df, 'highpassed_displacement_m', 'highpassed displacement m')
@@ -449,8 +463,13 @@ class Conversion:
         
     def convertGToOffsetG(self):
         """add new column to df where mean of g has been removed"""
-        gMean = self.df['g'].mean(axis=0)
-        self.df['offset_g'] = self.df['g'] - gMean
+        #gMean = self.df['g'].mean(axis=0)
+        #self.df['offset_g'] = self.df['g'] - gMean
+        #print('mean of g: {0} subtracted from g for {1}'.format(gMean, self.sensorCodeWithChannel))
+        
+        # comparing results of above to detrend - should be the same
+        self.df['offset_g'] = detrend(self.df['g'], type='constant')
+
         return self.df
     
     
@@ -502,15 +521,19 @@ class Conversion:
         
         
     def createUnpaddedDf(self):
-        self.unpaddedDf = self.df.iloc[500:40500].reset_index()
+        self.unpaddedDf = self.df.iloc[self.ignoredSamples:40500].reset_index()
+
+
+    def clipDf(self):
+    	self.df = self.df.iloc[self.ignoredSamples:40500].reset_index()
         
         
-    def detrendData(self, inputColumn, outputColumn):
+    def detrendData(self, df, inputColumn, outputColumn):
         """
-        detrend data via linear regression
+        detrend data by removing mean
         REMOVE ZERO PADS FIRST???
         """
-        self.df[outputColumn] = detrend(self.df[inputColumn], type='linear')
+        df[outputColumn] = detrend(df[inputColumn], type='constant')
     
     
     def plotGraph(self, df, column, plotTitle, padded=True):
@@ -523,7 +546,7 @@ class Conversion:
         """
         if padded:
             # was originally set to display [500:40500]
-            plot = self.df.iloc[5000:40500].reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
+            plot = self.df.iloc[self.ignoredSamples:40500].reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
         else:
             plot = self.df.iloc.reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
         fig = plot.get_figure()
@@ -536,7 +559,6 @@ class Conversion:
         fig.savefig(plotOutpath)
 
         
-
     def _butterHighpass(self):
         """
         return coefficients for highpass filter
@@ -566,16 +588,16 @@ class Conversion:
     def getStats(self, columnName):
         """
         UPDATE DOCSTRINGS
-        get statistics of portion of self.df between values 5000 and 40500
+        get statistics of portion of self.df between values self.ignoredSamples (around 6000) and 40500
         columnName: string holding name of column in self.df
         return: tuple holding:
             1. string holding max and min (to be printed to console or on plots)
             2. float holding peak value
         """
 
-        minVal = round(self.df.iloc[5000:40500][columnName].min(), 5)
-        maxVal = round(self.df.iloc[5000:40500][columnName].max(), 5)
-        meanVal = round(self.df.iloc[5000:40500][columnName].mean(), 5)
+        minVal = round(self.df.iloc[self.ignoredSamples:40500][columnName].min(), 5)
+        maxVal = round(self.df.iloc[self.ignoredSamples:40500][columnName].max(), 5)
+        meanVal = round(self.df.iloc[self.ignoredSamples:40500][columnName].mean(), 5)
         minValIndexList = self.df.index[self.df[columnName] == minVal].tolist()
         maxValIndexList = self.df.index[self.df[columnName] == maxVal].tolist()
 
@@ -583,7 +605,7 @@ class Conversion:
 
         #stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         print('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
-        stats = 'min: {0}\nmax: {1}\n'.format(minVal, maxVal)
+        stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         print(stats)
         logging.info('min val indexes: {0}'.format(minValIndexList))
         logging.info('max val indexes: {0}'.format(maxValIndexList))
@@ -600,7 +622,7 @@ class StatsTable:
         self.df['ID'] = getAllSensorCodesWithChannels()
         # self.columnDict maps columns names of df from Conversion object to column names of df in StatsTable object 
         # may not need this anymore
-        self.columnDict = {'bandpassed_g': 'acc_g', 'velocity_cms': 'vel_cm_s', 'highpassed_displacement_cm': 'disp_cm'}
+        #self.columnDict = {'bandpassed_g': 'acc_g', 'velocity_cms': 'vel_cm_s', 'highpassed_displacement_cm': 'disp_cm'}
 
 
     def updateStatsDf(self, sensorCodeWithChannel, statsColumnName, value):
