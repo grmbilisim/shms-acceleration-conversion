@@ -2,6 +2,8 @@
 
 """Visualization and conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
 
+"""Successfully clipping df (removing first 6000 sample after bandpass filter) in Conversion class for plotting and stats"""
+
 import sys
 import os
 import subprocess
@@ -321,11 +323,13 @@ class Conversion:
         self.unpaddedDf = None
         self.plotDir = "/home/grm/acc-data-conversion/working/no_ui/plots"
 
-        self.accStats = None
+        self.accRawStats = None
+        self.accOffsetStats = None
+        self.accBandpassedStats = None
         self.velStats = None
         self.dispStats = None
 
-        # int holding number of samples to ignore when plotting and getting stats
+        # int holding number of samples (at head of dataset) to ignore when plotting and getting stats
         self.ignoredSamples = 6000
 
         # these may be taken from user in future
@@ -345,25 +349,37 @@ class Conversion:
         self.convertCountToG()
         self.addZeroPad()
         #self.plotGraph(self.df, 'g', 'raw g')
+
         self.convertGToOffsetG()
         self.convertGToMetric()
-        self.getStats('offset_g')
-        self.plotGraph(self.df, 'offset_g', 'acceleration offset g')
+
+        self.accRawStats = self.getStats(self.df, 'g')
+        #self.getStats(self.df, 'offset_g')
+        self.accOffsetStats = self.getStats(self.df, 'offset_g')
+
+        self.plotGraph(self.df, 'offset_g', 'acceleration offset g', padded=True)
+
         #self.plotGraph(self.df, 'acc_ms2', 'acceleration ms2')
         self.butterBandpassFilter(self.df, 'offset_g', 'bandpassed_g')
         self.butterBandpassFilter(self.df, 'acc_ms2', 'bandpassed_ms2')
-        self.accStats = self.getStats('bandpassed_g')
-        self.plotGraph(self.df, 'bandpassed_g', 'bandpassed acceleration (g)')
+
+        self.accBandpassedStats = self.getStats(self.df, 'bandpassed_g')
+        self.plotGraph(self.df, 'bandpassed_g', 'bandpassed acceleration (g)', padded=True)
         #self.plotGraph(self.df, 'bandpassed_ms2', 'bandpassed acceleration (m/s2)')
+
         self.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
         #self.plotGraph(self.df, 'velocity_ms', 'uncorrected velocity')
+        #print(self.df.head())
+        self.clipDf()
+        #print(self.unpaddedDf.head())
 
         self.plotGraph(self.df, 'velocity_ms', 'velocity (m/s) - uncorrected')
 
         self.detrendData(self.df, 'velocity_ms', 'detrended_velocity_ms')
 
         self.convertMToCm(self.df, 'detrended_velocity_ms', 'detrended_velocity_cms')
-        self.velStats = self.getStats('detrended_velocity_cms')
+        self.velStats = self.getStats(self.df, 'detrended_velocity_cms')
+
         self.plotGraph(self.df, 'detrended_velocity_cms', 'detrended velocity (cm/s)')
         self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
         #self.plotGraph(self.df, 'displacement_m', 'uncorrected displacement')
@@ -374,7 +390,7 @@ class Conversion:
         self.convertMToCm(self.df, 'highpassed_displacement_m', 'highpassed_displacement_cm')
         self.plotGraph(self.df, 'highpassed_displacement_cm', 'highpassed displacement (cm)')
         #getStats(self.df, 'highpassed_displacement_cm', ignoreHeadVal=5000)
-        self.dispStats = self.getStats('highpassed_displacement_cm')
+        self.dispStats = self.getStats(self.df, 'highpassed_displacement_cm')
         
         
     def printHeadTail(self):
@@ -515,7 +531,11 @@ class Conversion:
         
         
     def createUnpaddedDf(self):
-        self.unpaddedDf = self.df.iloc[500:40500].reset_index()
+        self.unpaddedDf = self.df.iloc[self.ignoredSamples:40500].reset_index()
+
+
+    def clipDf(self):
+    	self.df = self.df.iloc[self.ignoredSamples:40500].reset_index()
         
         
     def detrendData(self, df, inputColumn, outputColumn):
@@ -526,7 +546,7 @@ class Conversion:
         df[outputColumn] = detrend(df[inputColumn], type='constant')
     
     
-    def plotGraph(self, df, column, plotTitle, padded=True):
+    def plotGraph(self, df, column, titleSuffix, padded=False):
         """
         plot graph of data and save graph
         df: pandas dataframe
@@ -534,15 +554,16 @@ class Conversion:
         plotTitle: string holding title of plot
         padded: boolean - True if input data has pad (of 500 zeros on both ends)
         """
+        plotTitle = self.sensorCodeWithChannel + ' ' + titleSuffix
         if padded:
             # was originally set to display [500:40500]
-            plot = self.df.iloc[self.ignoredSamples:40500].reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
+            plot = df.iloc[self.ignoredSamples:40500].reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
         else:
-            plot = self.df.iloc.reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
+            plot = df.reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
         fig = plot.get_figure()
         ax = fig.add_subplot(111)
         # only text portion of stats will be shown on plot
-        stats = self.getStats(column)[0]
+        stats = self.getStats(df, column)[0]
         ax.annotate(stats, xy=(0.6, 0.65), xycoords='figure fraction')
         plotFilename = '_'.join([self.eventTimestamp, self.sensorCodeWithChannel, column]) + '.png'
         plotOutpath = os.path.join(self.plotDir, plotFilename)
@@ -575,7 +596,7 @@ class Conversion:
         df[outputColumn] = df[inputColumn] * 100
 
 
-    def getStats(self, columnName):
+    def getStats(self, df, columnName):
         """
         UPDATE DOCSTRINGS
         get statistics of portion of self.df between values self.ignoredSamples (around 6000) and 40500
@@ -585,29 +606,24 @@ class Conversion:
             2. float holding peak value
         """
 
-        minVal = round(self.df.iloc[self.ignoredSamples:40500][columnName].min(), 5)
-        maxVal = round(self.df.iloc[self.ignoredSamples:40500][columnName].max(), 5)
-        meanVal = round(self.df.iloc[self.ignoredSamples:40500][columnName].mean(), 5)
-        minValIndexList = self.df.index[self.df[columnName] == minVal].tolist()
-        maxValIndexList = self.df.index[self.df[columnName] == maxVal].tolist()
+        minVal = round(df[columnName].min(), 5)
+        maxVal = round(df[columnName].max(), 5)
+        meanVal = round(df[columnName].mean(), 5)
 
         peakVal = max(abs(minVal), abs(maxVal))
 
-        #stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         print('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
         stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         print(stats)
-        logging.info('min val indexes: {0}'.format(minValIndexList))
-        logging.info('max val indexes: {0}'.format(maxValIndexList))
 
-        return (stats, peakVal)
+        return stats, peakVal
 
 
 # table holding peak values for acceleration, velocity, and displacement for each
 # channel of each device (modeled after Safe Report)
 class StatsTable:
     def __init__(self):
-        self.columnHeaders = ['ID', 'acc_g', 'vel_cm_s', 'disp_cm']
+        self.columnHeaders = ['ID', 'acc_g_raw', 'acc_g_offset', 'acc_g_bandpassed', 'vel_cm_s', 'disp_cm']
         self.df = pd.DataFrame(columns=self.columnHeaders)
         self.df['ID'] = getAllSensorCodesWithChannels()
         # self.columnDict maps columns names of df from Conversion object to column names of df in StatsTable object 
@@ -631,10 +647,26 @@ class StatsTable:
 def main():
     """Main function."""
 
-    ip = InputProcessing('2019-09-26T135930', '/home/grm/AllianzSHMS/working/test-mseed-files_20190926')
+    #ip = InputProcessing('2019-09-26T135930', '/home/grm/AllianzSHMS/working/test-mseed-files_20190926')
+    ip = InputProcessing('2020-01-11T163736', '/home/grm/AllianzSHMS/working/test-mseed-files_20200111')
+
     # if two files exist for each channel of each device, convert both files to df's and combine df's before conversion
     
     st = StatsTable()
+
+    def updateStatsTable():
+        # update stats table
+        accRawPeakVal = c.accRawStats[1]
+        accOffsetPeakVal = c.accOffsetStats[1]
+        accBandpassedPeakVal = c.accBandpassedStats[1]
+        velPeakVal = c.velStats[1]
+        dispPeakVal = c.dispStats[1]
+        st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_raw', accRawPeakVal)
+        st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_offset', accOffsetPeakVal)
+        st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_bandpassed', accBandpassedPeakVal)
+        st.updateStatsDf(c.sensorCodeWithChannel, 'vel_cm_s', velPeakVal)
+        st.updateStatsDf(c.sensorCodeWithChannel, 'disp_cm', dispPeakVal) 
+
 
     if ip.pairedTxtFileList:
         # move to separate function later
@@ -648,25 +680,19 @@ def main():
             df2 = p2.df
             df = pd.concat([df1, df2])
             c = Conversion(df, sensorCode, p1.sensorCodeWithChannel, ip.eventTimestamp)
-            
-            accPeakVal = c.accStats[1]
-            velPeakVal = c.velStats[1]
-            dispPeakVal = c.dispStats[1]
-            st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g', accPeakVal)
-            st.updateStatsDf(c.sensorCodeWithChannel, 'vel_cm_s', velPeakVal)
-            st.updateStatsDf(c.sensorCodeWithChannel, 'disp_cm', dispPeakVal)
-
+            updateStatsTable()
+        
     else:
         for txtFile in ip.txtFileList:
             p = ProcessedFromTxtFile(txtFile)
             df = p.df
-            c = Conversion(df, df.sensorCode, p.sensorCodeWithChannel, ip.eventTimestamp)
+            c = Conversion(df, p.sensorCode, p.sensorCodeWithChannel, ip.eventTimestamp)
+            updateStatsTable()
 
-            # create function from stats portion above and call here
-
+    
 
     print(st.df)
-    statsDfCsvPath = '/home/grm/acc-data-conversion/working/no_ui/' + ip.eventTimestamp + '.csv'
+    statsDfCsvPath = '/home/grm/acc-data-conversion/working/no_ui/' + ip.eventTimestamp + '_stats.csv'
     st.df.to_csv(statsDfCsvPath)
 
     # Create an instance of QApplication
