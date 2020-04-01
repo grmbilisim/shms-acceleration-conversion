@@ -330,7 +330,7 @@ class Conversion:
         self.dispStats = None
 
         # int holding number of samples (at head of dataset) to ignore when plotting and getting stats
-        self.ignoredSamples = 6000
+        self.ignoredSamples = 7000
 
         # these may be taken from user in future
         # low cutoff frequency for bandpass and highpass filters
@@ -353,34 +353,36 @@ class Conversion:
         self.convertGToOffsetG()
         self.convertGToMetric()
 
-        self.accRawStats = self.getStats(self.df, 'g')
+        
         #self.getStats(self.df, 'offset_g')
-        self.accOffsetStats = self.getStats(self.df, 'offset_g')
+        
 
-        self.plotGraph(self.df, 'offset_g', 'acceleration offset g', padded=True)
+        #self.plotGraph(self.df, 'offset_g', 'acceleration offset g', padded=True)
 
         #self.plotGraph(self.df, 'acc_ms2', 'acceleration ms2')
         self.butterBandpassFilter(self.df, 'offset_g', 'bandpassed_g')
         self.butterBandpassFilter(self.df, 'acc_ms2', 'bandpassed_ms2')
 
-        self.accBandpassedStats = self.getStats(self.df, 'bandpassed_g')
-        self.plotGraph(self.df, 'bandpassed_g', 'bandpassed acceleration (g)', padded=True)
+        
+        #self.plotGraph(self.df, 'bandpassed_g', 'bandpassed acceleration (g)', padded=True)
         #self.plotGraph(self.df, 'bandpassed_ms2', 'bandpassed acceleration (m/s2)')
 
         self.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
         #self.plotGraph(self.df, 'velocity_ms', 'uncorrected velocity')
         #print(self.df.head())
+
         self.clipDf()
+
         #print(self.unpaddedDf.head())
 
-        self.plotGraph(self.df, 'velocity_ms', 'velocity (m/s) - uncorrected')
+        #self.plotGraph(self.df, 'velocity_ms', 'velocity (m/s) - uncorrected')
 
         self.detrendData(self.df, 'velocity_ms', 'detrended_velocity_ms')
 
         self.convertMToCm(self.df, 'detrended_velocity_ms', 'detrended_velocity_cms')
-        self.velStats = self.getStats(self.df, 'detrended_velocity_cms')
+        
 
-        self.plotGraph(self.df, 'detrended_velocity_cms', 'detrended velocity (cm/s)')
+        #self.plotGraph(self.df, 'detrended_velocity_cms', 'detrended velocity (cm/s)')
         self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
         #self.plotGraph(self.df, 'displacement_m', 'uncorrected displacement')
         self.detrendData(self.df, 'displacement_m', 'detrended_displacement_m')
@@ -388,8 +390,13 @@ class Conversion:
         self.butterHighpassFilter(self.df, 'detrended_displacement_m', 'highpassed_displacement_m')
         #self.plotGraph(self.df, 'highpassed_displacement_m', 'highpassed displacement m')
         self.convertMToCm(self.df, 'highpassed_displacement_m', 'highpassed_displacement_cm')
-        self.plotGraph(self.df, 'highpassed_displacement_cm', 'highpassed displacement (cm)')
+        #self.plotGraph(self.df, 'highpassed_displacement_cm', 'highpassed displacement (cm)')
         #getStats(self.df, 'highpassed_displacement_cm', ignoreHeadVal=5000)
+
+        self.accRawStats = self.getStats(self.df, 'g')
+        self.accOffsetStats = self.getStats(self.df, 'offset_g')
+        self.accBandpassedStats = self.getStats(self.df, 'bandpassed_g')
+        self.velStats = self.getStats(self.df, 'detrended_velocity_cms')
         self.dispStats = self.getStats(self.df, 'highpassed_displacement_cm')
         
         
@@ -543,25 +550,29 @@ class Conversion:
         detrend data by removing mean
         REMOVE ZERO PADS FIRST???
         """
+        #mean = df.iloc[self.ignoredSamples:40500].mean()
+        #df[outputColumn] = df[inputColumn] - mean
         df[outputColumn] = detrend(df[inputColumn], type='constant')
     
     
-    def plotGraph(self, df, column, titleSuffix, padded=False):
+    def plotGraph(self, df, column, titleSuffix, yLimit, padded=False):
         """
         plot graph of data and save graph
         df: pandas dataframe
         column: string holding name of column used as y data
         plotTitle: string holding title of plot
+        yLimit: float holding value to be used to set range of plot along y-axis (from negative yLimit to yLimit)
         padded: boolean - True if input data has pad (of 500 zeros on both ends)
         """
         plotTitle = self.sensorCodeWithChannel + ' ' + titleSuffix
-        if padded:
+        #if padded:
             # was originally set to display [500:40500]
-            plot = df.iloc[self.ignoredSamples:40500].reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
-        else:
-            plot = df.reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle)
+        #plot = df.iloc[self.ignoredSamples:40500].reset_index().plot(kind='line', linewidth=1.0, x='index', y=column, color='red', title=plotTitle)
+        #else:
+        plot = df.reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle, linewidth=1.0)
         fig = plot.get_figure()
         ax = fig.add_subplot(111)
+        ax.set_ylim(-yLimit, yLimit)
         # only text portion of stats will be shown on plot
         stats = self.getStats(df, column)[0]
         ax.annotate(stats, xy=(0.6, 0.65), xycoords='figure fraction')
@@ -610,6 +621,10 @@ class Conversion:
         maxVal = round(df[columnName].max(), 5)
         meanVal = round(df[columnName].mean(), 5)
 
+        #minVal = round(df.iloc[self.ignoredSamples:40500][columnName].min(), 5)
+        #maxVal = round(df.iloc[self.ignoredSamples:40500][columnName].max(), 5)
+        #meanVal = round(df.iloc[self.ignoredSamples:40500][columnName].mean(), 5)
+
         peakVal = max(abs(minVal), abs(maxVal))
 
         print('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
@@ -623,7 +638,7 @@ class Conversion:
 # channel of each device (modeled after Safe Report)
 class StatsTable:
     def __init__(self):
-        self.columnHeaders = ['ID', 'acc_g_raw', 'acc_g_offset', 'acc_g_bandpassed', 'vel_cm_s', 'disp_cm']
+        self.columnHeaders = ['ID', 'acc_g_offset', 'acc_g_bandpassed', 'vel_cm_s', 'disp_cm']
         self.df = pd.DataFrame(columns=self.columnHeaders)
         self.df['ID'] = getAllSensorCodesWithChannels()
         # self.columnDict maps columns names of df from Conversion object to column names of df in StatsTable object 
@@ -640,6 +655,14 @@ class StatsTable:
         """
         #statsColumnName = self.columnDict[conversionColumnName]
         self.df.loc[self.df['ID'] == sensorCodeWithChannel, statsColumnName] = value
+
+
+    def getColumnMax(self, statsColumnName):
+        """
+        get maximum value in given column
+        statsColumnName: string holding name of stats table dataframe column from which to find maximum value
+        """
+        return self.df[statsColumnName].max()
         
 
 
@@ -654,40 +677,112 @@ def main():
     
     st = StatsTable()
 
+    # maintain order of following three lists - will be zipped together to create plot args
+    conversionColumnNames = ['offset_g', 'bandpassed_g', 'detrended_velocity_cms', 'highpassed_displacement_cm']
+    statsColumnNames = ['acc_g_offset', 'acc_g_bandpassed', 'vel_cm_s', 'disp_cm']
+    titleSuffixes = ['offset acceleration (g)', 'bandpassed acceleration (g)', 'detrended velocity (cm/s)', 'highpassed displacement (cm)']
+
     def updateStatsTable():
-        # update stats table
+        """update row of stats table with max values at each of the (currently four) parameters"""
         accRawPeakVal = c.accRawStats[1]
         accOffsetPeakVal = c.accOffsetStats[1]
         accBandpassedPeakVal = c.accBandpassedStats[1]
         velPeakVal = c.velStats[1]
         dispPeakVal = c.dispStats[1]
-        st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_raw', accRawPeakVal)
+        #st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_raw', accRawPeakVal)
         st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_offset', accOffsetPeakVal)
         st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_bandpassed', accBandpassedPeakVal)
         st.updateStatsDf(c.sensorCodeWithChannel, 'vel_cm_s', velPeakVal)
-        st.updateStatsDf(c.sensorCodeWithChannel, 'disp_cm', dispPeakVal) 
+        st.updateStatsDf(c.sensorCodeWithChannel, 'disp_cm', dispPeakVal)
 
 
+    def getStatsMaxValues(statsTableObject):
+        """
+        get max values from each column of the stats table (called only once after final stats table is completely populated)
+        (ensure that items of statsColumnNames and conversionColumnNames are in the same order)
+        statsTableObject: instance of StatsTable class
+        return: list holding max values of each column in stats table
+        """
+        columnMaxValues = []
+        for column in statsColumnNames:
+            columnMaxValues.append(statsTableObject.getColumnMax(column))
+        print('max values of {0}:\n{1}'.format(statsColumnNames, columnMaxValues))
+        #statsDict = dict(zip(conversionColumnNames, columnMaxValues))
+        return columnMaxValues
+
+
+    def getPlotArgs(columnMaxValues):
+        """
+        columnMaxValues: list holding max values of each column in stats table
+        return a list of tuples holding:
+             string holding conversion column names
+             string holding title suffix to be used for plot
+             max value from each STATS column (which will be used to define range of ylimits of all plots for given parameter)
+        """
+        plotArgs = zip(conversionColumnNames, titleSuffixes, columnMaxValues)
+        return plotArgs
+
+
+    # if this works as expected, modify two functions above to take a StatsTable object and a Conversion object
+    def drawPlots(conversionObject, columnMaxValues):
+        """
+        draw all (currently four) plots associated with given conversionObject 
+        conversionObject: instance of the Conversion class
+        """
+        plotArgs = getPlotArgs(columnMaxValues)
+        for item in plotArgs:
+            columnName, titleSuffix, maxVal = item
+            # add 1% of maxVal to maxVal to get range of plots along y-axis
+            yLimit = maxVal + maxVal * 0.01
+            # will probably need to create multiple df's in Conversion class for this
+            conversionObject.plotGraph(conversionObject.df, columnName, titleSuffix, yLimit)
+
+
+    def getConversionObjectFromTwoTxtFiles(txtFilePair):
+        """
+        txtFilePair: list of tuples containing text file name (and sensor code channel)
+        return: conversion object made from dataframe from combined text files
+        """
+        txtFilePair = sorted([item[0] for item in txtFilePair])
+        p1 = ProcessedFromTxtFile(txtFilePair[0])
+        df1 = p1.df
+        p2 = ProcessedFromTxtFile(txtFilePair[1])
+        df2 = p2.df
+        df = pd.concat([df1, df2])
+        return Conversion(df, p1.sensorCode, p1.sensorCodeWithChannel, ip.eventTimestamp)
+
+
+    def getConversionObjectFromOneTxtFile(txtFile):
+        p = ProcessedFromTxtFile(txtFile)
+        df = p.df
+        return Conversion(df, p.sensorCode, p.sensorCodeWithChannel, ip.eventTimestamp)
+
+
+    # create Conversion objects twice: 
+        # once to compile statistics into stats table
+        # second time to create plots (using peak values from stats table as plot 
+        # ranges so that each parameter uses same scale)
     if ip.pairedTxtFileList:
-        # move to separate function later
         for pair in ip.pairedTxtFileList:
-            sensorCode = pair[0][1]
-            txtFilePair = sorted([item[0] for item in pair])
-
-            p1 = ProcessedFromTxtFile(txtFilePair[0])
-            df1 = p1.df
-            p2 = ProcessedFromTxtFile(txtFilePair[1])
-            df2 = p2.df
-            df = pd.concat([df1, df2])
-            c = Conversion(df, sensorCode, p1.sensorCodeWithChannel, ip.eventTimestamp)
+            c = getConversionObjectFromTwoTxtFiles(pair)
             updateStatsTable()
+
+        statsColumnMaxValues = getStatsMaxValues(st)
+
+        for pair in ip.pairedTxtFileList:
+            c = getConversionObjectFromTwoTxtFiles(pair)
+            drawPlots(c, statsColumnMaxValues)
         
     else:
         for txtFile in ip.txtFileList:
-            p = ProcessedFromTxtFile(txtFile)
-            df = p.df
-            c = Conversion(df, p.sensorCode, p.sensorCodeWithChannel, ip.eventTimestamp)
+            c = getConversionObjectFromOneTxtFile(txtFile)
             updateStatsTable()
+
+        statsColumnMaxValues = getStatsMaxValues(st)
+
+        for txtFile in ip.txtFileList:
+            c = getConversionObjectFromOneTxtFile(txtFile)
+            drawPlots(c, statsColumnMaxValues)
 
     
 
