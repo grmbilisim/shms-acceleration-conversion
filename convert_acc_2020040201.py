@@ -2,8 +2,6 @@
 
 """Visualization and conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
 
-"""Successfully clipping df (removing first 6000 sample after bandpass filter) in Conversion class for plotting and stats"""
-
 import sys
 import os
 import subprocess
@@ -13,7 +11,33 @@ from scipy.signal import butter, lfilter, detrend
 import math
 import logging
 
+# Import QApplication and the required widgets from PyQt5.QtWidgets
 
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtWidgets import QWidget
+from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QFileInfo
+from PyQt5.QtWidgets import QGridLayout
+from PyQt5.QtWidgets import QLineEdit
+from PyQt5.QtWidgets import QTextEdit
+from PyQt5.QtWidgets import QPushButton
+from PyQt5.QtWidgets import QVBoxLayout
+from PyQt5.QtWidgets import QLabel
+from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QDialogButtonBox
+from PyQt5.QtWidgets import QFormLayout
+from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QErrorMessage
+
+from PyQt5.QtPrintSupport import QPrinter
+from PyQt5.QtGui import QPainter
+from PyQt5.QtWidgets import QButtonGroup
+from PyQt5.QtWidgets import QRadioButton
+from PyQt5.QtWidgets import QScrollArea
+
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
@@ -23,8 +47,8 @@ __author__ = 'Nick LiBassi'
 
 ERROR_MSG = 'ERROR'
 
-# set logging to 'DEBUG' to print all statements to console, 'INFO' to print less
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
+# set logging to 'DEBUG' to print debug statements to console
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 """
 General Notes:
@@ -34,6 +58,8 @@ remove unused imports leftover from calculator app
 fix inconsistent use of '_' for private variables
 fix inconsisent use of sensor code naming (prefixes, sensorCode, sensorCodeWithChannel)
 """
+
+# move all helper functions into a public class?
 
 SENSOR_CODES = ('N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF')
 
@@ -72,6 +98,7 @@ def getSensorCodeInfo(inputFile):
         sensorCode = sensorCodeWithChannel
 
     return sensorCode, sensorCodeWithChannel
+
 
 
 def getTimeText(inputFile):
@@ -123,99 +150,6 @@ def sortFiles(inputFileList):
         return firstFileList + secondFileList
 
 
-# get info on miniseed files, convert to to text files, get info on text files
-class InputProcessing:
-    def __init__(self, eventTimestamp, miniseedDirPath):
-        """
-        initialize InputProcessing object
-        eventTimestamp: string holding approximate time of event in form '2020-01-11T163736'
-        mseedDirPath: string holding path of directory holding (24 or 48) miniseed files 
-        """
-        self.eventTimestamp = eventTimestamp
-        self.miniseedDirPath = miniseedDirPath
-        self.miniseedFileList = None
-        self.miniseedFileCount = None
-        
-        self.workingBaseDir = "/home/grm/acc-data-conversion/working/no_ui"
-        self.workingDirPath = None
-        self.txtFileList = None
-        self.txtFileCount = None
-        self.pairedTxtFileList = []
-        
-        self.setMiniseedFileInfo()
-        self.setWorkingDir()
-        self.convertMiniseedToAscii()
-        self.setTxtFileInfo()
-        # if input file count is 48, self.pairedTxtFileList will not be empty 
-        # after self.pairDeviceTxtFiles() runs - 
-        # will hold list of list of two-item tuples in format (filename, sensorCode)
-        self.pairDeviceTxtFiles()
-
-
-    def setMiniseedFileInfo(self):
-        """Get number of input miniseed files (must be either 24 or 48)"""
-        self.miniseedFileList = [f for f in os.listdir(self.miniseedDirPath) if f.endswith(".m")]
-        self.miniseedFileCount = len(self.miniseedFileList)
-        logging.debug('miniseed file count: {}'.format(self.miniseedFileCount))
-        if self.miniseedFileCount not in [24, 48]:
-            raise ValueError('number of input miniseed files must be 24 or 48 - check directory holding miniseed files')         
-            
-
-    def setWorkingDir(self):
-        """
-        If not yet created, create working dir using event id entered
-        by user.
-        """
-        
-        self.workingDirPath = os.path.join(self.workingBaseDir, self.eventTimestamp)
-
-        if not os.path.isdir(self.workingDirPath):
-            os.mkdir(self.workingDirPath)
-
-
-    def convertMiniseedToAscii(self):
-        """
-        Convert all miniseed files in miniseed directory to ascii files 
-        """
-        for f in self.miniseedFileList:
-            basename = f.rsplit(".m")[0]
-            filename = basename + ".txt"
-            outPath = os.path.join(self.workingDirPath, filename)
-            os.chdir(self.miniseedDirPath)
-            subprocess.run(["./mseed2ascii", f, "-o", outPath])
-
-
-    def setTxtFileInfo(self):
-        """Set list of sorted input text file paths and number of text files"""
-        self.txtFileList = [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
-        self.txtFileList = sortFiles(self.txtFileList)
-        # may not need self._inputTxtFileCount
-        self.txtFileCount = len(self.txtFileList)
-        for path in self.txtFileList:
-            logging.debug(path)
-
-
-    def pairDeviceTxtFiles(self):
-        """
-        If seismic event spans two hours, create list of 24 two-item lists holding path pairs of miniseed files to be processed.
-        Assume number of input miniseed files to be 24 (if event falls in single hour) or 48 (if event spans two hours)
-        """
-        if self.txtFileCount == 48:
-            txtFileSensorCodeList = []
-            for file in self.txtFileList:
-                sensorCodeWithChannel = getSensorCodeInfo(file)[1]
-                txtFileSensorCodeList.append((file, sensorCodeWithChannel))
-
-            for t in txtFileSensorCodeList:
-                logging.debug('txtFileSensorCodeList tuple: {}'.format(t))
-
-            allSensorCodesWithChannels = getAllSensorCodesWithChannels()
-            for c in allSensorCodesWithChannels:
-                pairedList = [f for f in txtFileSensorCodeList if c in f]
-                self.pairedTxtFileList.append(pairedList)
-
-
-
 # get clean df from single text file
 class ProcessedFromTxtFile:
     def __init__(self, txtFilePath):
@@ -223,7 +157,7 @@ class ProcessedFromTxtFile:
         self.df = None
         self.headerList = None
         self.sensorCode, self.sensorCodeWithChannel = getSensorCodeInfo(self.txtFilePath)
-        
+
         self.convertTxtToDf()
         self.setHeaderList()
         self.getDfWithTimestampedCounts()
@@ -301,26 +235,22 @@ class ProcessedFromTxtFile:
 # class used to convert data from count to acceleration, velocity, and displacement
 class Conversion:
     def __init__(self, df, sensorCode, sensorCodeWithChannel, eventTimestamp):
+        
         self.df = df
         self.sensorCode = sensorCode
         self.sensorCodeWithChannel = sensorCodeWithChannel
         self.eventTimestamp = eventTimestamp
+
         self.sensitivity = None
-
-        self.plotDir = "/home/grm/acc-data-conversion/working/no_ui/plots"
-
         self.accRawStats = None
         self.accOffsetStats = None
         self.accBandpassedStats = None
         self.velStats = None
         self.dispStats = None
 
-        # int holding number of samples (at head of dataset) to ignore when plotting and getting stats
-        self.ignoredSamples = 7000
-
         # these may be taken from user in future
         # low cutoff frequency for bandpass and highpass filters
-        self.lowcut = 0.07
+        self.lowcut = 0.05
         # high cutoff frequency for bandpass filter
         self.highcut = 40
         # sampling frequency
@@ -329,7 +259,7 @@ class Conversion:
         self.order = 2
         # time between samples in seconds
         self.dt = 1/float(self.fs)
-        
+
         self.truncateDf()
         self.setSensitivity()
         self.convertCountToG()
@@ -346,7 +276,7 @@ class Conversion:
 
         self.detrendData('velocity_ms', 'detrended_velocity_ms')
 
-        self.convertMToCm('detrended_velocity_ms', 'detrended_velocity_cms')
+        self.convertMToCm(self.df, 'detrended_velocity_ms', 'detrended_velocity_cms')
         
         self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
 
@@ -361,14 +291,14 @@ class Conversion:
         self.accBandpassedStats = self.getStats('bandpassed_g')
         self.velStats = self.getStats('detrended_velocity_cms')
         self.dispStats = self.getStats('highpassed_displacement_cm')
-        
-        
+
+
     def logHeadTail(self):
         """print head and tail of self.df to console"""
         logging.debug(self.df.head())
         logging.debug(self.df.tail())
-    
-    
+
+
     def truncateDf(self):
         """
         truncate self.df based on timestamp for known time event
@@ -388,8 +318,8 @@ class Conversion:
         logging.info('start time: {}'.format(startTime))
         logging.info('end time: {}'.format(endTime))
         self.logHeadTail()
-        
-        
+
+
     def setSensitivity(self):
         """
         return float holding sensitivity in V/g based on sensorCode
@@ -407,8 +337,8 @@ class Conversion:
             return self.sensitivity
         else:
             raise ValueError('Non-null value must be assigned to sensitivity.')
-        
-            
+
+
     def convertCountToG(self):
         """
         add new column to df to hold acceleration in g (converted from 
@@ -416,8 +346,8 @@ class Conversion:
         """
         self.df['g'] = self.df['count'] * (2.5/8388608) * (1/self.sensitivity)
         self.logHeadTail()
-        
-        
+
+
     def addZeroPad(self, padLength=500, location='both'):
         """
         add zeropad of given length at given location to necessary columns: timestamp and g
@@ -436,8 +366,8 @@ class Conversion:
         paddedG.reset_index(drop=True, inplace=True)
         paddedData = {'timestamp': paddedTimestamp, 'g': paddedG}
         self.df = pd.DataFrame(paddedData, columns=['timestamp','g'])
-        
-        
+
+
     def convertGToOffsetG(self):
         """add new column to df where mean of g has been removed"""
         #gMean = self.df['g'].mean(axis=0)
@@ -446,14 +376,14 @@ class Conversion:
         
         # gives same result as above
         self.df['offset_g'] = detrend(self.df['g'], type='constant')
-    
-    
+
+
     def convertGToMetric(self):
         """add new column to df showing acceleration in m/s^2"""
         self.df['acc_ms2'] = self.df['offset_g'] * 9.80665
         self.logHeadTail()
-    
-    
+
+
     def butterBandpass(self):
         """
         return bandpass filter coefficients...
@@ -469,8 +399,8 @@ class Conversion:
         #b, a = butter(self.order, low, btype='highpass')
         logging.info('butterworth coefficients - b: {0}, a: {1}'.format(b, a))
         return b, a
-    
-    
+
+
     def butterBandpassFilter(self, inputColumn, outputColumn):
         """
         create columns in df holding bandpassed acceleration data
@@ -480,7 +410,7 @@ class Conversion:
         b, a = self.butterBandpass()
         self.df[outputColumn] = lfilter(b, a, self.df[inputColumn])
 
-    
+
     def integrateDfColumn(self, inputColumn, outputColumn):
         """integrate given dataframe column (given as string)"""
         inputList = list(self.df[inputColumn])
@@ -496,8 +426,8 @@ class Conversion:
 
     def clipDf(self):
         self.df = self.df.iloc[self.ignoredSamples:40500].reset_index()
-        
-        
+
+
     def detrendData(self, inputColumn, outputColumn):
         """
         detrend data by removing mean
@@ -507,8 +437,8 @@ class Conversion:
         #mean = df.iloc[self.ignoredSamples:40500].mean()
         #df[outputColumn] = df[inputColumn] - mean
         self.df[outputColumn] = detrend(self.df[inputColumn], type='constant')
-    
-    
+
+
     def butterHighpass(self):
         """
         return coefficients for highpass filter
@@ -518,16 +448,17 @@ class Conversion:
         cutoff = self.lowcut / nyq
         b, a = butter(self.order, cutoff, btype='high')
         return b, a
-    
-    
+        return b, a
+
+
     def butterHighpassFilter(self, inputColumn, outputColumn):
         """
         modeled after Butterworth bandpass code in scipy cookbook
         """
         b, a = self.butterHighpass()
         self.df[outputColumn] = lfilter(b, a, self.df[inputColumn])
-        
-        
+
+
     def convertMToCm(self, inputColumn, outputColumn):
         """
         convert values in meters to values in centimeters
@@ -578,7 +509,256 @@ class Conversion:
         ax.annotate(stats, xy=(0.6, 0.65), xycoords='figure fraction')
         plotFilename = '_'.join([self.eventTimestamp, self.sensorCodeWithChannel, column]) + '.png'
         plotOutpath = os.path.join(self.plotDir, plotFilename)
-        fig.savefig(plotOutpath)
+        fig.savefig(plotOutpath)       
+
+
+# Create a subclass of QMainWindow to set up the portion of GUI 
+# to take information from user
+class PrimaryUi(QMainWindow):
+    """AccConvert's initial view for taking input from user."""
+    def __init__(self, model, results):
+        """View initializer."""
+        super().__init__()
+
+        self._model = model
+        # results will be shown in second window
+        self._results = results
+
+        self.eventTimestamp = None
+        self.miniseedDirPath = None
+        self.miniseedFileList = None
+        self.miniseedFileCount = None
+
+        
+        self.workingBaseDir = "/home/grm/acc-data-conversion/working"
+        self.workingDirPath = None
+
+        self.txtFileList = None
+        self.txtFileCount = None
+
+        self.pairedTxtFileList = []
+
+        #self.plotDict = None
+        #self.processed1 = None
+        #self.df1 = None
+        
+        # Set some of main window's properties
+        self.setWindowTitle('Accelerometer Data Conversion')
+        self.setFixedSize(500, 300)
+        # Set the central widget and the general layout
+        self.generalLayout = QVBoxLayout()
+        self._centralWidget = QWidget(self)
+        self.setCentralWidget(self._centralWidget)
+        self._centralWidget.setLayout(self.generalLayout)
+        
+        # Create the display and the buttons
+        self.createTextInputFields()
+        self.createRadioButtons()
+        self.createSubmitButton()
+
+
+    def getEventTimestamp(self):
+        """Get user input (string) for event id field"""
+        logging.debug(self.eventField.text())
+        self.eventTimestamp = self.eventField.text()
+
+
+    def getMiniseedDirPath(self):
+        """Get user input (string) for miniseed directory path"""
+        self.miniseedDirPath = self.miniseedDirField.text()
+
+
+    def setMiniseedFileInfo(self):
+        """Get number of input miniseed files (must be either 24 or 48)"""
+        self.miniseedFileList = [f for f in os.listdir(self.miniseedDirPath) if f.endswith(".m")]
+        self.miniseedFileCount = len(self.miniseedFileList)
+        logging.debug('miniseed file count: {}'.format(self.miniseedFileCount))
+        if self.miniseedFileCount not in [24, 48]:
+            raise ValueError('number of input miniseed files must be 24 or 48 - check directory holding miniseed files')  
+
+
+    def setWorkingDir(self):
+        """
+        If not yet created, create working dir using event id entered
+        by user.
+        """
+        
+        self.workingDirPath = os.path.join(self.workingBaseDir, self.eventTimestamp)
+
+        if not os.path.isdir(self.workingDirPath):
+            os.mkdir(self.workingDirPath)
+
+
+    def convertMiniseedToAscii(self):
+        """
+        Convert all miniseed files in miniseed directory to ascii files 
+        """
+        for f in self.miniseedFileList:
+            basename = f.rsplit(".m")[0]
+            filename = basename + ".txt"
+            outPath = os.path.join(self.workingDirPath, filename)
+            os.chdir(self.miniseedDirPath)
+            subprocess.run(["./mseed2ascii", f, "-o", outPath])
+
+
+    def createTextInputFields(self):
+        """Create text input fields"""
+        self.eventLabel = QLabel(self)
+        self.eventLabel.setText('Create event id ex. "2020-01-11T163736"')
+        self.miniseedDirLabel = QLabel(self)
+        self.miniseedDirLabel.setText('Path of directory holding miniseed files')
+        self.eventField = QLineEdit(self)
+        self.miniseedDirField = QLineEdit(self)
+        self.generalLayout.addWidget(self.eventLabel)
+        self.generalLayout.addWidget(self.eventField)
+        self.generalLayout.addWidget(self.miniseedDirLabel)
+        self.generalLayout.addWidget(self.miniseedDirField)
+
+
+    def createRadioButtons(self):
+        self.approachGroup = QButtonGroup(self._centralWidget)
+        self.timeAutopro = QRadioButton('Time-domain per Autopro report')
+        self.timeAutopro.setChecked(True)
+        self.timeBaseline = QRadioButton('Time-domain with baseline correction')
+        self.freqCorrection = QRadioButton('Frequency-domain with correction filter')
+        self.freqPlain = QRadioButton('Frequency-domain without correction filter')
+
+        self.approachGroup.addButton(self.timeAutopro)
+        self.approachGroup.addButton(self.timeBaseline)
+        self.approachGroup.addButton(self.freqCorrection)
+        self.approachGroup.addButton(self.freqPlain)
+
+        self.generalLayout.addWidget(self.timeAutopro)
+        self.generalLayout.addWidget(self.timeBaseline)
+        self.generalLayout.addWidget(self.freqCorrection)
+        self.generalLayout.addWidget(self.freqPlain)
+
+
+    def setTxtFileInfo(self):
+        """Set list of sorted input text file paths and number of text files"""
+        self.txtFileList = [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
+        self.txtFileList = sortFiles(self.txtFileList)
+        # may not need self._inputTxtFileCount
+        self.txtFileCount = len(self.txtFileList)
+        for path in self.txtFileList:
+            logging.debug(path)
+
+
+    def pairDeviceTxtFiles(self):
+        """
+        If seismic event spans two hours, create list of 24 two-item lists holding path pairs of miniseed files to be processed.
+        Assume number of input miniseed files to be 24 (if event falls in single hour) or 48 (if event spans two hours)
+        """
+        if self.txtFileCount == 48:
+            txtFileSensorCodeList = []
+            for file in self.txtFileList:
+                sensorCodeWithChannel = getSensorCodeInfo(file)[1]
+                txtFileSensorCodeList.append((file, sensorCodeWithChannel))
+
+            for t in txtFileSensorCodeList:
+                logging.debug('txtFileSensorCodeList tuple: {}'.format(t))
+
+            allSensorCodesWithChannels = getAllSensorCodesWithChannels()
+            for c in allSensorCodesWithChannels:
+                pairedList = [f for f in txtFileSensorCodeList if c in f]
+                self.pairedTxtFileList.append(pairedList)    
+
+
+    def processUserInput(self):
+        self.getEventTimestamp()
+        self.getMiniseedDirPath()
+        self.setMiniseedFileInfo()
+        #self._pairDeviceMiniseedFiles()
+        self.setWorkingDir()
+        self.convertMiniseedToAscii()
+        self.setTxtFileInfo()
+        #self._setPlotDict(self.txtFileList)
+        
+
+    # manipulate data per Autopro report
+    # move code shared with other approaches to separate method (or decorator) later
+    def _mainAutopro(self):
+        logging.debug("mainAutopro run")
+
+        self.processUserInput()
+
+        for position, pathTitlePair in self.plotDict.items():
+            self._setModelDf(pathTitlePair)
+            self._model.sensorCode = self.processed1._sensorCode
+
+            self._model.truncateDf(self.eventTimestamp)
+            logging.debug(self._model.df.head())
+
+            self._model.sensitivity = self._model.setSensitivity()
+            logging.debug(self._model.sensitivity)
+
+            logging.debug(len(self._model.df))
+
+            self._model.convertCountToG()
+
+            # accept default values to add 500 zeros to each side of g data
+            self._model.addZeroPad()
+
+            self._model.convertGToOffsetG()
+
+            self._model.convertGToMetric()
+
+            logging.debug(self._model.df.head())
+            logging.debug(self._model.df.tail())
+
+            # get header list from elsewhere if necessary (model no longer has getHeaderList())
+            #logging.debug(self._model.getHeaderList())
+
+            stats_offset_g = getStats(self._model.df, 'offset_g')
+            logging.info('offset g stats: {}'.format(stats_offset_g))
+
+            # plot acceleration
+            self._results.createSubplot('offset_g', 0.06, position, pathTitlePair[1])
+
+
+            '''
+            # get 'bandpassed_g' and 'bandpassed_ms2'
+            self._model.butterBandpassFilter()
+
+            self._model.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
+
+            stats_vel = getStats(self._model.df, 'velocity_ms')
+            logging.info('velocity stats: {}'.format(stats_vel))
+
+            self._model.detrendData('velocity_ms', 'detrended_velocity_ms')
+
+            stats_detrended_vel = getStats(self._model.df, 'detrended_velocity_ms')
+            logging.info('detrended velocity stats: {}'.format(stats_detrended_vel))
+
+            #self._model.removeZeropad()
+
+            # plot velocity
+            self._results.createSubplot('detrended_velocity_ms', 0.02, position + 24, pathTitlePair[1])
+            
+            
+            # add displacement
+            self._model.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
+
+            self._model.detrendData('displacement_m', 'detrended_displacement_m')
+
+            self._model.df['detrended_displacement_cm'] = self._model.df['detrended_displacement_m'] * 100
+
+            stats_detrended_disp = getStats(self._model.df, 'detrended_displacement_m')
+            logging.info('detrended displacement stats: {}'.format(stats_detrended_disp))
+
+            # plot displacement
+            self._results.createSubplot('detrended_displacement_cm', 0.005, position + 48, pathTitlePair[1])
+            '''
+            self._results.show()
+
+
+    def createSubmitButton(self):
+        """Create single submit button"""
+        self.submitBtn = QPushButton(self)
+        self.submitBtn.setText("Submit")
+        # using only Autopro approach now - add others later
+        self.submitBtn.clicked.connect(self._mainAutopro)
+        self.generalLayout.addWidget(self.submitBtn)
 
 
 # table holding peak values for acceleration, velocity, and displacement for each
@@ -607,150 +787,91 @@ class StatsTable:
         statsColumnName: string holding name of stats table dataframe column from which to find maximum value
         """
         return self.df[statsColumnName].max()
+
+
+
+# Create canvas to display results by subclassing FigureCanvasQTAgg
+class ResultsCanvas(QMainWindow):
+    def __init__(self, model, width=14, height=20, dpi=100):
         
+        #figure = Figure(figsize=(width, height), dpi=dpi, tight_layout={'w_pad': 0.25, 'h_pad': 0.25})
+        self.figure = Figure(figsize=(width, height), dpi=dpi)
+        #self.figure.tight_layout()
+        self._model = model
+        #self.axes = figure.add_subplot(111)
+        #self.axes.xaxis.set_major_locator(plt.MaxNLocator(4))
+
+        QMainWindow.__init__(self)
+        #FigureCanvas.__init__(self, self.figure)
+        #self.createSubplot()
+
+        self.widget = QWidget()
+        self.setCentralWidget(self.widget)
+        self.vbox = QVBoxLayout()
+        self.widget.setLayout(self.vbox)
+        self.widget.layout().setContentsMargins(0,0,0,0)
+        self.widget.layout().setSpacing(0)
+
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.draw()
+
+        self.scroll = QScrollArea(self.widget)
+        self.scroll.setWidget(self.canvas)
+
+        self.nav = NavigationToolbar(self.canvas, self.widget)
+        self.widget.layout().addWidget(self.nav)
+        self.widget.layout().addWidget(self.scroll)
+
+        #self.draw()
+
+        #self._printPDF()
+
+
+    def createSubplot(self, yData, yLimit, subplotPos, figTitle):
+        """
+        Plot figure
+        args:
+        yData: string holding name of dataframe column to be plotted
+        subplotPos: integer holding position of plot
+        """
+        ax = self.figure.add_subplot(24, 3, subplotPos)
+        # y_lim values will be set dynamically per event
+        ax.set_ylim(-yLimit, yLimit)
+        ax.xaxis.set_visible(False)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(4))
+        dfCopy = self._model.df.copy()
+        stats = getStats(dfCopy, yData)
+        logging.debug('stats for {0}: {1}'.format(figTitle, stats))
+        # text location will be set dynamically per event
+        ax.text(20000, -0.005, stats)
+        # plot all data except for zero pads - edit later if necessary
+        self._model.df.iloc[500:40500].reset_index().plot(kind='line', x='index', y=yData, title=figTitle, ax=ax)
+        self.figure.tight_layout()
+        del dfCopy
+        #self.draw()
+
 
 # Client code
 def main():
     """Main function."""
-
-    #ip = InputProcessing('2019-09-26T135930', '/home/grm/AllianzSHMS/working/test-mseed-files_20190926')
-    ip = InputProcessing('2020-01-11T163736', '/home/grm/AllianzSHMS/working/test-mseed-files_20200111')
-
-    # if two files exist for each channel of each device, convert both files to df's and combine df's before conversion
-    
-    st = StatsTable()
-
-    # maintain order of following three lists - will be zipped together to create plot args
-    conversionColumnNames = ['offset_g', 'bandpassed_g', 'detrended_velocity_cms', 'highpassed_displacement_cm']
-    statsColumnNames = ['acc_g_offset', 'acc_g_bandpassed', 'vel_cm_s', 'disp_cm']
-    titleSuffixes = ['offset acceleration (g)', 'bandpassed acceleration (g)', 'detrended velocity (cm/s)', 'highpassed displacement (cm)']
-
-    def updateStatsTable():
-        """update row of stats table with max values at each of the (currently four) parameters"""
-        accRawPeakVal = c.accRawStats[1]
-        accOffsetPeakVal = c.accOffsetStats[1]
-        accBandpassedPeakVal = c.accBandpassedStats[1]
-        velPeakVal = c.velStats[1]
-        dispPeakVal = c.dispStats[1]
-        #st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_raw', accRawPeakVal)
-        st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_offset', accOffsetPeakVal)
-        st.updateStatsDf(c.sensorCodeWithChannel, 'acc_g_bandpassed', accBandpassedPeakVal)
-        st.updateStatsDf(c.sensorCodeWithChannel, 'vel_cm_s', velPeakVal)
-        st.updateStatsDf(c.sensorCodeWithChannel, 'disp_cm', dispPeakVal)
-
-
-    def getStatsMaxValues(statsTableObject):
-        """
-        get max values from each column of the stats table (called only once after final stats table is completely populated)
-        (ensure that items of statsColumnNames and conversionColumnNames are in the same order)
-        statsTableObject: instance of StatsTable class
-        return: list holding max values of each column in stats table
-        """
-        columnMaxValues = []
-        for column in statsColumnNames:
-            columnMaxValues.append(statsTableObject.getColumnMax(column))
-        print('max values of {0}:\n{1}'.format(statsColumnNames, columnMaxValues))
-        #statsDict = dict(zip(conversionColumnNames, columnMaxValues))
-        return columnMaxValues
-
-
-    def getPlotArgs(columnMaxValues):
-        """
-        columnMaxValues: list holding max values of each column in stats table
-        return a list of tuples holding:
-             string holding conversion column names
-             string holding title suffix to be used for plot
-             max value from each STATS column (which will be used to define range of ylimits of all plots for given parameter)
-        """
-        plotArgs = zip(conversionColumnNames, titleSuffixes, columnMaxValues)
-        return plotArgs
-
-
-    # if this works as expected, modify two functions above to take a StatsTable object and a Conversion object
-    def drawPlots(conversionObject, columnMaxValues):
-        """
-        draw all (currently four) plots associated with given conversionObject 
-        conversionObject: instance of the Conversion class
-        """
-        plotArgs = getPlotArgs(columnMaxValues)
-        for item in plotArgs:
-            columnName, titleSuffix, maxVal = item
-            # add 1% of maxVal to maxVal to get range of plots along y-axis
-            yLimit = maxVal + maxVal * 0.01
-            # will probably need to create multiple df's in Conversion class for this
-            conversionObject.plotGraph(columnName, titleSuffix, yLimit)
-
-
-    def getConversionObjectFromTwoTxtFiles(txtFilePair):
-        """
-        txtFilePair: list of tuples containing text file name (and sensor code channel)
-        return: conversion object made from dataframe from combined text files
-        """
-        txtFilePair = sorted([item[0] for item in txtFilePair])
-        p1 = ProcessedFromTxtFile(txtFilePair[0])
-        df1 = p1.df
-        p2 = ProcessedFromTxtFile(txtFilePair[1])
-        df2 = p2.df
-        df = pd.concat([df1, df2])
-        return Conversion(df, p1.sensorCode, p1.sensorCodeWithChannel, ip.eventTimestamp)
-
-
-    def getConversionObjectFromOneTxtFile(txtFile):
-        p = ProcessedFromTxtFile(txtFile)
-        df = p.df
-        return Conversion(df, p.sensorCode, p.sensorCodeWithChannel, ip.eventTimestamp)
-
-
-    # create Conversion objects twice: 
-        # once to compile statistics into stats table
-        # second time to create plots (using peak values from stats table as plot 
-        # ranges so that each parameter uses same scale)
-    if ip.pairedTxtFileList:
-        for pair in ip.pairedTxtFileList:
-            c = getConversionObjectFromTwoTxtFiles(pair)
-            updateStatsTable()
-
-        statsColumnMaxValues = getStatsMaxValues(st)
-
-        for pair in ip.pairedTxtFileList:
-            c = getConversionObjectFromTwoTxtFiles(pair)
-            drawPlots(c, statsColumnMaxValues)
-        
-    else:
-        for txtFile in ip.txtFileList:
-            c = getConversionObjectFromOneTxtFile(txtFile)
-            updateStatsTable()
-
-        statsColumnMaxValues = getStatsMaxValues(st)
-
-        for txtFile in ip.txtFileList:
-            c = getConversionObjectFromOneTxtFile(txtFile)
-            drawPlots(c, statsColumnMaxValues)
-
-    
-
-    print(st.df)
-    statsDfCsvPath = '/home/grm/acc-data-conversion/working/no_ui/' + ip.eventTimestamp + '_stats.csv'
-    st.df.to_csv(statsDfCsvPath)
-
     # Create an instance of QApplication
-    #convertacc = QApplication(sys.argv)
+    convertacc = QApplication(sys.argv)
 
-    #model = AccConvertModel()
-    #results = ResultsCanvas(model)
+    model = Conversion()
+    results = ResultsCanvas(model)
     # Show the application's GUI
 
-    #view = AccConvertUi(model, results)
+    view = PrimaryUi(model, results)
     
-    #view.show()
+    view.show()
 
     # Create the instances of the model and the controller
-    #model = AccConvertModel()
+    #model = Conversion()
     #AccConvertCtrl(model=model, view=view)
 
     #results._printPDF()
     # Execute the calculator's main loop
-    #sys.exit(convertacc.exec_())
+    sys.exit(convertacc.exec_())
 
     #results._printPDF()
 
