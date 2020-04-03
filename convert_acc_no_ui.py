@@ -625,6 +625,8 @@ def main():
     statsColumnNames = ['acc_g_offset', 'acc_g_bandpassed', 'vel_cm_s', 'disp_cm']
     titleSuffixes = ['offset acceleration (g)', 'bandpassed acceleration (g)', 'detrended velocity (cm/s)', 'highpassed displacement (cm)']
 
+
+    # replace c's and st's with conversionObject and statsTableObject given as args
     def updateStatsTable():
         """update row of stats table with max values at each of the (currently four) parameters"""
         accRawPeakVal = c.accRawStats[1]
@@ -666,7 +668,6 @@ def main():
         return plotArgs
 
 
-    # if this works as expected, modify two functions above to take a StatsTable object and a Conversion object
     def drawPlots(conversionObject, columnMaxValues):
         """
         draw all (currently four) plots associated with given conversionObject 
@@ -696,6 +697,10 @@ def main():
 
 
     def getConversionObjectFromOneTxtFile(txtFile):
+        """
+        txtFile: string holding name of text file produced from miniseed file
+        return: conversion object made from dataframe produced from text file
+        """
         p = ProcessedFromTxtFile(txtFile)
         df = p.df
         return Conversion(df, p.sensorCode, p.sensorCodeWithChannel, ip.eventTimestamp)
