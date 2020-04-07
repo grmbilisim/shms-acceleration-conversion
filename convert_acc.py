@@ -58,6 +58,8 @@ remove unused imports leftover from calculator app
 moved functionality from Controller class to PrimaryUi class
 
 can handle either 24 or 48 input miniseed files
+
+need to fix B4 plots on ComparisonCanvases
 """
 
 # move all helper functions into a public class?
@@ -100,6 +102,15 @@ def getSensorCodeInfo(inputFile):
 
     return sensorCode, sensorCodeWithChannel
 
+
+def getFloor(sensorCodeText):
+    """
+    Return string holding only floor portion (only digits) of sensor code
+    sensorCodeText: string holding either sensor code or sensor code with channel
+    """
+    floorChars = [c for c in sensorCodeText if c.isdigit()]
+    floor = ''.join(floorChars)
+    return floor
 
 
 def getTimeText(inputFile):
@@ -241,6 +252,7 @@ class Conversion:
         self.df = df
         self.sensorCode = sensorCode
         self.sensorCodeWithChannel = sensorCodeWithChannel
+        self.floor = getFloor(self.sensorCode)
         self.eventTimestamp = eventTimestamp
 
         self.sensitivity = None
@@ -268,7 +280,7 @@ class Conversion:
 
         self.ignoredSamples = 6000
 
-        self.subplotDict = {'B4Fx': 19,
+        self.resultsSubplotDict = {'B4Fx': 19,
                              'B4Fy': 20,
                              'B4Fz': 21,
                              'FFN': 22,
@@ -292,6 +304,9 @@ class Conversion:
                              'S39x': 4,
                              'S39y': 5,
                              'S39z': 6}
+
+        # key '4' refers to floor 'B4'
+        self.comparisonSubplotDict = {'39': 1, '24': 2, '12': 3, '4': 4}
 
         self.truncateDf()
         self.setSensitivity()
@@ -520,9 +535,9 @@ class Conversion:
         return stats, peakVal
 
 
-    def plotGraph(self, canvasObject, column, titleSuffix, yLimit):
+    def plotResultsGraph(self, canvasObject, column, titleSuffix, yLimit):
         """
-        plot graph of data and save graph
+        plot graph of data to given ResultsCanvas object (one of 24 graphs on one page)
         canvasObject: instance of ResultsCanvas class
         column: string holding name of column used as y data
         plotTitle: string holding title of plot
@@ -530,7 +545,7 @@ class Conversion:
         """
         plotTitle = self.sensorCodeWithChannel + ' ' + titleSuffix
 
-        subplotPos = self.subplotDict[self.sensorCodeWithChannel]
+        subplotPos = self.resultsSubplotDict[self.sensorCodeWithChannel]
 
         ax = canvasObject.figure.add_subplot(8, 3, subplotPos)
 
@@ -546,10 +561,28 @@ class Conversion:
 
         canvasObject.figure.tight_layout()
         
-        # may or may not save plots individually - modify these lines if necessary
-        #plotFilename = '_'.join([self.eventTimestamp, self.sensorCodeWithChannel, column]) + '.png'
-        #plotOutpath = os.path.join(self.workingDirPath, plotFilename)
-        #canvasObject.figure.savefig(plotOutpath)       
+
+    def plotComparisonGraph(self, canvasObject, yLimit):
+        """
+        plot displacement (for now) on a figure comparing displacements at different levels
+        canvasObject: instance of ComparisonCanvas class
+        yLimit: float holding value to be used to set range of plot along y-axis (from negative yLimit to yLimit)
+        """
+        subplotPos = self.comparisonSubplotDict[self.floor]
+        ax = canvasObject.figure.add_subplot(4, 1, subplotPos)
+        plot = self.df.reset_index().plot(kind='line', x='index', y='highpassed_displacement_cm', color='red', linewidth=1.0, ax=ax)
+        ax.set_ylim(-yLimit, yLimit)
+        ax.xaxis.set_visible(False)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(4))
+        if self.floor == '39':
+            ax.set_title(canvasObject.windowTitle)
+        ax.set_ylabel(self.sensorCodeWithChannel, rotation=0)
+
+        # only text portion of stats will be shown on plot
+        #stats = self.getStats(column)[0]
+        #ax.annotate(stats, xy=(0.6, 0.65), xycoords='figure fraction')
+
+        canvasObject.figure.tight_layout()
 
 
 # Create a subclass of QMainWindow to set up the portion of GUI 
@@ -584,8 +617,17 @@ class PrimaryUi(QMainWindow):
         self.statsColumnNames = self.statsTable.columnHeaders[1:]
         self.conversionColumnNames = ['offset_g', 'bandpassed_g', 'detrended_velocity_cms', 'highpassed_displacement_cm']
         self.titleSuffixes = ['offset acceleration (g)', 'bandpassed acceleration (g)', 'detrended velocity (cm/s)', 'highpassed displacement (cm)']
-        self.canvases = [self.offsetGResultsCanvas, self.bandpassedGResultsCanvas, self.velResultsCanvas, self.dispResultsCanvas]
+        self.resultsCanvases = [self.offsetGResultsCanvas, self.bandpassedGResultsCanvas, self.velResultsCanvas, self.dispResultsCanvas]
         # ************
+        # self.statsColumnMaxValues will hold peak values in same order as self.conversionColumnNames 
+        self.statsColumnMaxValues = None
+
+        self.NXcomparisonCanvas = ComparisonCanvas('N. Corner X-Dir (cm)')
+        self.NYcomparisonCanvas = ComparisonCanvas('N. Corner Y-Dir (cm)')
+        self.SXcomparisonCanvas = ComparisonCanvas('S. Corner X-Dir (cm)')
+        self.SYcomparisonCanvas = ComparisonCanvas('S. Corner Y-Dir (cm)')
+
+        self.allCanvases = self.resultsCanvases + [self.NXcomparisonCanvas, self.NYcomparisonCanvas, self.SXcomparisonCanvas, self.SYcomparisonCanvas]
 
         # Set some of main window's properties
         self.setWindowTitle('Accelerometer Data Conversion')
@@ -736,30 +778,50 @@ class PrimaryUi(QMainWindow):
         return columnMaxValues
 
 
-    def getPlotArgs(self, columnMaxValues):
+    def getPlotArgs(self):
         """
-        columnMaxValues: list holding max values of each column in stats table
         return a list of tuples holding:
              string holding conversion column names
              string holding title suffix to be used for plot
              max value from each STATS column (which will be used to define range of ylimits of all plots for given parameter)
         """
-        plotArgs = zip(self.canvases, self.conversionColumnNames, self.titleSuffixes, columnMaxValues)
+        plotArgs = zip(self.resultsCanvases, self.conversionColumnNames, self.titleSuffixes, self.statsColumnMaxValues)
         return plotArgs
 
 
-    def drawPlots(self, conversionObject, columnMaxValues):
+    def drawResultsPlots(self, conversionObject):
         """
         draw all (currently four) plots associated with given conversionObject 
         conversionObject: instance of the Conversion class
         """
-        plotArgs = self.getPlotArgs(columnMaxValues)
+        plotArgs = self.getPlotArgs()
         for item in plotArgs:
             canvas, columnName, titleSuffix, maxVal = item
             # add 1% of maxVal to maxVal to get range of plots along y-axis
             yLimit = maxVal + maxVal * 0.01
-            # will probably need to create multiple df's in Conversion class for this
-            conversionObject.plotGraph(canvas, columnName, titleSuffix, yLimit)
+            # will probably need to create multiple df's in Conversion class for this (??)
+            conversionObject.plotResultsGraph(canvas, columnName, titleSuffix, yLimit)
+
+
+    def drawComparisonPlot(self, conversionObject):
+        """
+        add subplot of displacement to ComparisonCanvas if self.sensorCodeWithChannel meets criteria
+        """
+        displacementMaxVal = self.statsColumnMaxValues[-1]
+        if all(i in conversionObject.sensorCodeWithChannel for i in ['N', 'x']):
+            conversionObject.plotComparisonGraph(self.NXcomparisonCanvas, displacementMaxVal)
+        elif all(i in conversionObject.sensorCodeWithChannel for i in ['S', 'x']):
+            conversionObject.plotComparisonGraph(self.SXcomparisonCanvas, displacementMaxVal)
+        elif all(i in conversionObject.sensorCodeWithChannel for i in ['N', 'y']):
+            conversionObject.plotComparisonGraph(self.NYcomparisonCanvas, displacementMaxVal)
+        elif all(i in conversionObject.sensorCodeWithChannel for i in ['S', 'y']):
+            conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
+
+        # modify this so these appear on the x or y canvases no matter what (will be repeated)
+        elif all(i in conversionObject.sensorCodeWithChannel for i in ['B', 'x']):
+            conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
+        elif all(i in conversionObject.sensorCodeWithChannel for i in ['B', 'y']):
+            conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
 
 
     def getConversionObjectFromTwoTxtFiles(self, txtFilePair):
@@ -787,16 +849,15 @@ class PrimaryUi(QMainWindow):
 
 
     def showCanvases(self):
-        for canvas in self.canvases:
+        for canvas in self.allCanvases:
             canvas.show()
 
 
     def getResults(self):
         """
         perform conversions for all datasets (24 datasets from 24 or 48 text files)
-        call drawPlots() to plot acceleration, velocity, and displacement for all datasets 
+        call drawResultsPlots() to plot acceleration, velocity, and displacement for all datasets 
         """
-        print('self.pairedTxtFileList: {0}'.format(self.pairedTxtFileList))
         if self.pairedTxtFileList:
             for pair in self.pairedTxtFileList:
                 c = self.getConversionObjectFromTwoTxtFiles(pair)
@@ -806,11 +867,12 @@ class PrimaryUi(QMainWindow):
                 #c.df.to_csv(outCsv)
 
                 self.updateStatsTable(c)
-            statsColumnMaxValues = self.getStatsMaxValues()
+            self.statsColumnMaxValues = self.getStatsMaxValues()
 
             for pair in self.pairedTxtFileList:
                 c = self.getConversionObjectFromTwoTxtFiles(pair)
-                self.drawPlots(c, statsColumnMaxValues)
+                self.drawResultsPlots(c)
+                self.drawComparisonPlot(c)
 
             self.showCanvases()
 
@@ -818,11 +880,12 @@ class PrimaryUi(QMainWindow):
             for txtFile in self.txtFileList:
                 c = self.getConversionObjectFromOneTxtFile(txtFile)
                 self.updateStatsTable(c)
-            statsColumnMaxValues = self.getStatsMaxValues()
+            self.statsColumnMaxValues = self.getStatsMaxValues()
 
             for txtFile in self.txtFileList:
                 c = self.getConversionObjectFromOneTxtFile(txtFile)
-                self.drawPlots(c, statsColumnMaxValues)
+                self.drawResultsPlots(c)
+                self.drawComparisonPlot(c)
 
             self.showCanvases()
 
@@ -877,14 +940,21 @@ class StatsTable:
         return self.df[statsColumnName].max()
 
 
-# ResultsCanvas objects used to display plots for all 24 devices/channels
-# Class has one instance each of:
-#    Figure (which can hold multiple subplots)
-#    FigureCanvas (which holds the figure) 
-class ResultsCanvas(QMainWindow):
+
+# Comparison Figure objects were going to be used to display four plots but ...
+class ComparisonFigure(Figure):
+    def __init__(self, title, width=14, height=20, dpi=100):
+        Figure.__init__(self)
+        self.title = title
+        self.figsize = (width, height)
+        self.dpi = dpi
+
+
+class BaseCanvas(QMainWindow):
     def __init__(self, windowTitle, width=14, height=20, dpi=100):
         QMainWindow.__init__(self)
-        self.setWindowTitle(windowTitle)
+        self.windowTitle = windowTitle
+        self.setWindowTitle(self.windowTitle)
         self.figure = Figure(figsize=(width, height), dpi=dpi)
         self.widget = QWidget()
         self.setCentralWidget(self.widget)
@@ -900,7 +970,26 @@ class ResultsCanvas(QMainWindow):
 
         self.nav = NavigationToolbar(self.canvas, self.widget)
         self.widget.layout().addWidget(self.nav)
-        self.widget.layout().addWidget(self.scroll)
+        self.widget.layout().addWidget(self.scroll)    
+
+
+# ComparisonCanvas objects used to display four plots 
+# wanted to show four ComparisonFigure objects (with four plots each) but seems that
+# each FigureCanvas can only have one Figure object
+class ComparisonCanvas(BaseCanvas):
+    def __init__(self, windowTitle):
+        BaseCanvas.__init__(self, windowTitle, width=5, height=10)
+        
+
+
+# ResultsCanvas objects used to display plots for all 24 devices/channels
+# Class has one instance each of:
+#    Figure (which can hold multiple subplots)
+#    FigureCanvas (which holds the figure) 
+class ResultsCanvas(BaseCanvas):
+    def __init__(self, windowTitle):
+        BaseCanvas.__init__(self, windowTitle)
+
 
 
 # Client code
