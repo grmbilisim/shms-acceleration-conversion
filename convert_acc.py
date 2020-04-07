@@ -48,7 +48,7 @@ __author__ = 'Nick LiBassi'
 ERROR_MSG = 'ERROR'
 
 # set logging to 'DEBUG' to print debug statements to console
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 
 """
 General Notes:
@@ -57,7 +57,7 @@ remove unused imports leftover from calculator app
 
 moved functionality from Controller class to PrimaryUi class
 
-results look good for 2020.01.11 event but not for 2019.09.26 event
+can handle either 24 or 48 input miniseed files
 """
 
 # move all helper functions into a public class?
@@ -579,7 +579,7 @@ class PrimaryUi(QMainWindow):
         self.bandpassedGResultsCanvas = ResultsCanvas('Bandpassed Acceleration (g)')
         self.velResultsCanvas = ResultsCanvas('Velocity (cm/s)')
         self.dispResultsCanvas = ResultsCanvas('Displacement (cm)')
-        # order of following four properties must not be changed
+        # order of following four lists must remain as is
         # get stats column names except for 'ID'
         self.statsColumnNames = self.statsTable.columnHeaders[1:]
         self.conversionColumnNames = ['offset_g', 'bandpassed_g', 'detrended_velocity_cms', 'highpassed_displacement_cm']
@@ -796,9 +796,15 @@ class PrimaryUi(QMainWindow):
         perform conversions for all datasets (24 datasets from 24 or 48 text files)
         call drawPlots() to plot acceleration, velocity, and displacement for all datasets 
         """
+        print('self.pairedTxtFileList: {0}'.format(self.pairedTxtFileList))
         if self.pairedTxtFileList:
             for pair in self.pairedTxtFileList:
                 c = self.getConversionObjectFromTwoTxtFiles(pair)
+
+                # export df to csv if necessary
+                #outCsv = os.path.join(c.workingDirPath, c.sensorCodeWithChannel + '.csv')
+                #c.df.to_csv(outCsv)
+
                 self.updateStatsTable(c)
             statsColumnMaxValues = self.getStatsMaxValues()
 
@@ -827,12 +833,11 @@ class PrimaryUi(QMainWindow):
         self.getEventTimestamp()
         self.getMiniseedDirPath()
         self.setMiniseedFileInfo()
-        #self._pairDeviceMiniseedFiles()
         self.setWorkingDir()
         self.convertMiniseedToAscii()
         self.setTxtFileInfo()
+        self.pairDeviceTxtFiles()
         self.getResults()
-        #self._setPlotDict(self.txtFileList)
 
 
     def createSubmitButton(self):
@@ -872,7 +877,8 @@ class StatsTable:
         return self.df[statsColumnName].max()
 
 
-# ResultsCanvas class has one instance each of:
+# ResultsCanvas objects used to display plots for all 24 devices/channels
+# Class has one instance each of:
 #    Figure (which can hold multiple subplots)
 #    FigureCanvas (which holds the figure) 
 class ResultsCanvas(QMainWindow):
@@ -888,7 +894,6 @@ class ResultsCanvas(QMainWindow):
         self.widget.layout().setSpacing(0)
 
         self.canvas = FigureCanvas(self.figure)
-        #self.canvas.draw()
 
         self.scroll = QScrollArea(self.widget)
         self.scroll.setWidget(self.canvas)
@@ -906,7 +911,6 @@ def main():
 
     # Show the application's GUI
     view = PrimaryUi()
-    #controller = Controller(view)
     view.show()
 
     # Execute the program's main loop

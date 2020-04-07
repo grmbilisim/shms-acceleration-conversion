@@ -613,8 +613,8 @@ class StatsTable:
 def main():
     """Main function."""
 
-    #ip = InputProcessing('2019-09-26T135930', '/home/grm/AllianzSHMS/working/test-mseed-files_20190926')
-    ip = InputProcessing('2020-01-11T163736', '/home/grm/AllianzSHMS/working/test-mseed-files_20200111')
+    ip = InputProcessing('2019-09-26T135930', '/home/grm/AllianzSHMS/working/test-mseed-files_20190926')
+    #ip = InputProcessing('2020-01-11T163736', '/home/grm/AllianzSHMS/working/test-mseed-files_20200111')
 
     # if two files exist for each channel of each device, convert both files to df's and combine df's before conversion
     
