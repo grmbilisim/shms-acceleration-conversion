@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 from scipy.signal import butter, lfilter, detrend
 import math
+from fpdf import FPDF
+from PyPDF2 import PdfFileMerger
 import logging
 
 # Import QApplication and the required widgets from PyQt5.QtWidgets
@@ -38,6 +40,7 @@ from PyQt5.QtWidgets import QScrollArea
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
@@ -59,7 +62,7 @@ moved functionality from Controller class to PrimaryUi class
 
 can handle either 24 or 48 input miniseed files
 
-need to fix B4 plots on ComparisonCanvases
+creating report similar to pages 3-4 of Safe Report
 """
 
 # move all helper functions into a public class?
@@ -263,7 +266,7 @@ class Conversion:
         self.dispStats = None
 
         self.workingBaseDir = "/home/grm/acc-data-conversion/working"
-        self.workingDirPath = os.path.join(self.workingBaseDir, self.eventTimestamp)
+        self.workingDir = os.path.join(self.workingBaseDir, self.eventTimestamp)
         #self.plotDir = "/home/grm/acc-data-conversion/working/no_ui/plots"
 
         # these may be taken from user in future
@@ -554,6 +557,7 @@ class Conversion:
         ax.set_ylim(-yLimit, yLimit)
         ax.xaxis.set_visible(False)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))
+        ax.get_legend().remove()
 
         # only text portion of stats will be shown on plot
         #stats = self.getStats(column)[0]
@@ -577,6 +581,7 @@ class Conversion:
         if self.floor == '39':
             ax.set_title(canvasObject.windowTitle)
         ax.set_ylabel(self.sensorCodeWithChannel, rotation=0)
+        ax.get_legend().remove()
 
         # only text portion of stats will be shown on plot
         #stats = self.getStats(column)[0]
@@ -599,7 +604,7 @@ class PrimaryUi(QMainWindow):
         self.miniseedFileCount = None
         
         self.workingBaseDir = "/home/grm/acc-data-conversion/working"
-        self.workingDirPath = None
+        self.workingDir = None
 
         self.txtFileList = None
         self.txtFileCount = None
@@ -627,7 +632,11 @@ class PrimaryUi(QMainWindow):
         self.SXcomparisonCanvas = ComparisonCanvas('S. Corner X-Dir (cm)')
         self.SYcomparisonCanvas = ComparisonCanvas('S. Corner Y-Dir (cm)')
 
-        self.allCanvases = self.resultsCanvases + [self.NXcomparisonCanvas, self.NYcomparisonCanvas, self.SXcomparisonCanvas, self.SYcomparisonCanvas]
+        # retain current order of self.comparisonCanvases
+        self.comparisonCanvases = [self.NXcomparisonCanvas, self.NYcomparisonCanvas, self.SXcomparisonCanvas, self.SYcomparisonCanvas]
+ 
+        self.allCanvases = self.resultsCanvases + self.comparisonCanvases
+        self.comparisonPngNames = ['nx.png', 'ny.png', 'sx.png', 'sy.png']
 
         # Set some of main window's properties
         self.setWindowTitle('Accelerometer Data Conversion')
@@ -669,10 +678,10 @@ class PrimaryUi(QMainWindow):
         If not yet created, create working dir using event id entered
         by user.
         """
-        self.workingDirPath = os.path.join(self.workingBaseDir, self.eventTimestamp)
+        self.workingDir = os.path.join(self.workingBaseDir, self.eventTimestamp)
 
-        if not os.path.isdir(self.workingDirPath):
-            os.mkdir(self.workingDirPath)
+        if not os.path.isdir(self.workingDir):
+            os.mkdir(self.workingDir)
 
 
     def convertMiniseedToAscii(self):
@@ -682,7 +691,7 @@ class PrimaryUi(QMainWindow):
         for f in self.miniseedFileList:
             basename = f.rsplit(".m")[0]
             filename = basename + ".txt"
-            outPath = os.path.join(self.workingDirPath, filename)
+            outPath = os.path.join(self.workingDir, filename)
             os.chdir(self.miniseedDirPath)
             subprocess.run(["./mseed2ascii", f, "-o", outPath])
 
@@ -722,7 +731,7 @@ class PrimaryUi(QMainWindow):
 
     def setTxtFileInfo(self):
         """Set list of sorted input text file paths and number of text files"""
-        self.txtFileList = [os.path.join(self.workingDirPath, f) for f in os.listdir(self.workingDirPath)]
+        self.txtFileList = [os.path.join(self.workingDir, f) for f in os.listdir(self.workingDir)]
         self.txtFileList = sortFiles(self.txtFileList)
         self.txtFileCount = len(self.txtFileList)
         for path in self.txtFileList:
@@ -819,9 +828,11 @@ class PrimaryUi(QMainWindow):
 
         # modify this so these appear on the x or y canvases no matter what (will be repeated)
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['B', 'x']):
-            conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.SXcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.NXcomparisonCanvas, displacementMaxVal)
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['B', 'y']):
             conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.NYcomparisonCanvas, displacementMaxVal)
 
 
     def getConversionObjectFromTwoTxtFiles(self, txtFilePair):
@@ -853,6 +864,57 @@ class PrimaryUi(QMainWindow):
             canvas.show()
 
 
+    def saveResultsFiguresAsPdf(self):
+        """save results figures to a single pdf"""
+        pdfPath = os.path.join(self.workingDir, 'results.pdf')
+        pdf = PdfPages(pdfPath)
+        for canvas in self.resultsCanvases:
+            pdf.savefig(canvas.figure)
+        pdf.close()
+
+
+    def saveComparisonFigures(self):
+        """save comparison figures as individual png files"""
+        comparisonCanvasDict = dict(zip(self.comparisonCanvases, self.comparisonPngNames))
+        for canvas in self.comparisonCanvases:
+            pngPath = os.path.join(self.workingDir, comparisonCanvasDict[canvas])
+            canvas.figure.savefig(pngPath)
+
+
+    def combineComparisonFigures(self):
+        """combine comparison png files into single (one-page) pdf"""
+        pdf = FPDF()
+        pngFiles = [f for f in os.listdir(self.workingDir) if f in self.comparisonPngNames]
+        pngPaths = [os.path.join(self.workingDir, f) for f in pngFiles]
+        #coordsList = [(10, 10), (110, 10), (10, 155), (110, 155)]
+        pdf.add_page()
+        for path in pngPaths:
+            if 'nx' in path:
+                x, y = (10, 10)
+            elif 'ny' in path:
+                x, y = (110, 10)
+            elif 'sx' in path:
+                x, y = (10, 155)
+            elif 'sy' in path:
+                x, y = (110, 155)
+            pdf.image(path, x, y, h=140)
+        pdf.output(os.path.join(self.workingDir, 'displacement_comparison.pdf'), "F")
+
+
+    def combinePdfs(self):
+        """combine displacement_comparison.pdf and results.pdf into single report.pdf"""
+        pdfs = ['displacement_comparison.pdf', 'results.pdf']
+        pdfPaths = [os.path.join(self.workingDir, f) for f in pdfs]
+        merger = PdfFileMerger()
+        for pdf in pdfPaths:
+            merger.append(pdf)
+
+        merger.write(os.path.join(self.workingDir, 'report_{0}.pdf'.format(self.eventTimestamp)))
+        merger.close()
+
+
+
+
     def getResults(self):
         """
         perform conversions for all datasets (24 datasets from 24 or 48 text files)
@@ -863,7 +925,7 @@ class PrimaryUi(QMainWindow):
                 c = self.getConversionObjectFromTwoTxtFiles(pair)
 
                 # export df to csv if necessary
-                #outCsv = os.path.join(c.workingDirPath, c.sensorCodeWithChannel + '.csv')
+                #outCsv = os.path.join(c.workingDir, c.sensorCodeWithChannel + '.csv')
                 #c.df.to_csv(outCsv)
 
                 self.updateStatsTable(c)
@@ -874,7 +936,7 @@ class PrimaryUi(QMainWindow):
                 self.drawResultsPlots(c)
                 self.drawComparisonPlot(c)
 
-            self.showCanvases()
+            #self.showCanvases()
 
         else:
             for txtFile in self.txtFileList:
@@ -887,7 +949,11 @@ class PrimaryUi(QMainWindow):
                 self.drawResultsPlots(c)
                 self.drawComparisonPlot(c)
 
-            self.showCanvases()
+        self.showCanvases()
+        self.saveResultsFiguresAsPdf()
+        self.saveComparisonFigures()
+        self.combineComparisonFigures()
+        self.combinePdfs()
 
 
     #****************************
@@ -978,7 +1044,7 @@ class BaseCanvas(QMainWindow):
 # each FigureCanvas can only have one Figure object
 class ComparisonCanvas(BaseCanvas):
     def __init__(self, windowTitle):
-        BaseCanvas.__init__(self, windowTitle, width=5, height=10)
+        BaseCanvas.__init__(self, windowTitle, width=4, height=7)
         
 
 
