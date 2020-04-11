@@ -44,6 +44,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
+import pdfkit
+
 
 __version__ = '0.1'
 __author__ = 'Nick LiBassi'
@@ -73,14 +75,16 @@ SENSOR_CODES = ('N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF')
 def getAllSensorCodesWithChannels():
     """
     Return list of 24 strings holding sensor codes with channels in form 'N39x'
+    (in order of those on page 5 of Safe Report)
     """
     buildingSensorCodes = [c for c in SENSOR_CODES if c != 'FF']
     axes = ['x', 'y', 'z']
-    farFieldCodes = ['FFW', 'FFN', 'FFZ']
-    allSensorCodesWithChannels = [] + farFieldCodes
+    allSensorCodesWithChannels = []
     for p in buildingSensorCodes:
         for a in axes:
             allSensorCodesWithChannels.append(p + a)
+    farFieldCodes = ['FFN', 'FFW', 'FFZ']
+    allSensorCodesWithChannels += farFieldCodes
     return allSensorCodesWithChannels
 
 
@@ -114,6 +118,35 @@ def getFloor(sensorCodeText):
     floorChars = [c for c in sensorCodeText if c.isdigit()]
     floor = ''.join(floorChars)
     return floor
+
+
+def getFloorCode(sensorCodeText):
+    """
+    Return string holding floor code.
+    Sample input: 'N39x'
+    Sample ouput: 'L40'
+    """
+    if sensorCodeText[0] == 'F':
+        return 'GF'
+    elif sensorCodeText[0] in ['N', 'S']:
+        letter = 'L'
+        numeric = str(int(getFloor(sensorCodeText)) + 1)
+    elif sensorCodeText[0] == 'B':
+        letter = 'B'
+        numeric = getFloor(sensorCodeText)
+    return letter + numeric
+
+
+def getAxis(sensorCodeWithChannel):
+    """
+    return upper case version of axis: 'X', 'Y', or 'Z'
+    """
+    lastLetter = sensorCodeWithChannel[-1]
+    if lastLetter in ['x', 'y', 'z']:
+        return lastLetter.upper()
+    else:
+        dirDict = {'N': 'X', 'W': 'Y', 'Z': 'Z'}
+        return dirDict[lastLetter]
 
 
 def getTimeText(inputFile):
@@ -350,6 +383,12 @@ class Conversion:
         logging.debug(self.df.tail())
 
 
+    def printHeadTail(self):
+        """print head and tail of self.df to console"""
+        print(self.df.head())
+        print(self.df.tail())
+
+
     def truncateDf(self):
         """
         truncate self.df based on timestamp for known time event
@@ -527,15 +566,35 @@ class Conversion:
             2. float holding peak value (greater absolute value of min and max)
         """
 
-        minVal = round(self.df[columnName].min(), 5)
-        maxVal = round(self.df[columnName].max(), 5)
-        meanVal = round(self.df[columnName].mean(), 5)
+        minVal = round(self.df[columnName].min(), 3)
+        maxVal = round(self.df[columnName].max(), 3)
+        meanVal = round(self.df[columnName].mean(), 3)
+
+        '''
+        # get indexes of min and max values
+        try:
+            minValIndex = self.df.index[self.df[columnName] == minVal][0]
+        except: 
+            minValIndex = 30000
+        try:
+            maxValIndex = self.df.index[self.df[columnName] == maxVal][0]
+        except:
+            maxValIndex = 30000
+
+        minPair = (minValIndex, minVal)
+        maxPair = (maxValIndex, maxVal)
+
+        if abs(minPair[1]) > abs(maxPair[1]):
+            peakPair = minPair
+        else:
+            peakPair = maxPair
+        '''
         peakVal = max(abs(minVal), abs(maxVal))
 
         logging.info('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
         stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         logging.info(stats)
-        return stats, peakVal
+        return stats, peakPair
 
 
     def plotResultsGraph(self, canvasObject, column, titleSuffix, yLimit):
@@ -552,7 +611,7 @@ class Conversion:
 
         ax = canvasObject.figure.add_subplot(8, 3, subplotPos)
 
-        plot = self.df.reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle, linewidth=1.0, ax=ax)
+        plot = self.df.reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle, linewidth=0.5, ax=ax)
 
         ax.set_ylim(-yLimit, yLimit)
         ax.xaxis.set_visible(False)
@@ -560,9 +619,13 @@ class Conversion:
         ax.get_legend().remove()
 
         # only text portion of stats will be shown on plot
-        #stats = self.getStats(column)[0]
-        #ax.annotate(stats, xy=(0.6, 0.65), xycoords='figure fraction')
+        #peakVal = self.getStats(column)[1]
+        #ax.annotate('peak: {0}'.format(peakVal), xy=(0.6, 0.65), xycoords='figure fraction')
+        x, y = self.getStats(column)
+        #ax.text(0.6, 0.65, 'peak: {0}'.format(peakVal), transform=ax.transAxes)
+        ax.text(x, y, 'peak: {0}'.format(y))
 
+        # move this to Class constructor?
         canvasObject.figure.tight_layout()
         
 
@@ -618,8 +681,8 @@ class PrimaryUi(QMainWindow):
         self.velResultsCanvas = ResultsCanvas('Velocity (cm/s)')
         self.dispResultsCanvas = ResultsCanvas('Displacement (cm)')
         # order of following four lists must remain as is
-        # get stats column names except for 'ID'
-        self.statsColumnNames = self.statsTable.columnHeaders[1:]
+        # get stats column names except for static columns
+        self.statsColumnNames = self.statsTable.columnHeaders[-4:]
         self.conversionColumnNames = ['offset_g', 'bandpassed_g', 'detrended_velocity_cms', 'highpassed_displacement_cm']
         self.titleSuffixes = ['offset acceleration (g)', 'bandpassed acceleration (g)', 'detrended velocity (cm/s)', 'highpassed displacement (cm)']
         self.resultsCanvases = [self.offsetGResultsCanvas, self.bandpassedGResultsCanvas, self.velResultsCanvas, self.dispResultsCanvas]
@@ -767,10 +830,10 @@ class PrimaryUi(QMainWindow):
         velPeakVal = conversionObject.velStats[1]
         dispPeakVal = conversionObject.dispStats[1]
 
-        self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, 'acc_g_offset', accOffsetPeakVal)
-        self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, 'acc_g_bandpassed', accBandpassedPeakVal)
-        self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, 'vel_cm_s', velPeakVal)
-        self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, 'disp_cm', dispPeakVal)
+        self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[0], accOffsetPeakVal)
+        self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[1], accBandpassedPeakVal)
+        self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[2], velPeakVal)
+        self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[3], dispPeakVal)
 
 
     def getStatsMaxValues(self):
@@ -902,8 +965,8 @@ class PrimaryUi(QMainWindow):
 
 
     def combinePdfs(self):
-        """combine displacement_comparison.pdf and results.pdf into single report.pdf"""
-        pdfs = ['displacement_comparison.pdf', 'results.pdf']
+        """combine all pdfs into single report.pdf"""
+        pdfs = ['displacement_comparison.pdf', 'results.pdf', 'stats_table.pdf']
         pdfPaths = [os.path.join(self.workingDir, f) for f in pdfs]
         merger = PdfFileMerger()
         for pdf in pdfPaths:
@@ -911,8 +974,6 @@ class PrimaryUi(QMainWindow):
 
         merger.write(os.path.join(self.workingDir, 'report_{0}.pdf'.format(self.eventTimestamp)))
         merger.close()
-
-
 
 
     def getResults(self):
@@ -936,8 +997,6 @@ class PrimaryUi(QMainWindow):
                 self.drawResultsPlots(c)
                 self.drawComparisonPlot(c)
 
-            #self.showCanvases()
-
         else:
             for txtFile in self.txtFileList:
                 c = self.getConversionObjectFromOneTxtFile(txtFile)
@@ -950,9 +1009,12 @@ class PrimaryUi(QMainWindow):
                 self.drawComparisonPlot(c)
 
         self.showCanvases()
+        
         self.saveResultsFiguresAsPdf()
         self.saveComparisonFigures()
         self.combineComparisonFigures()
+        self.statsTable.printTable()
+        self.statsTable.tableToPdf(self.workingDir)
         self.combinePdfs()
 
 
@@ -982,9 +1044,20 @@ class PrimaryUi(QMainWindow):
 # channel of each device (modeled after Safe Report)
 class StatsTable:
     def __init__(self):
-        self.columnHeaders = ['ID', 'acc_g_offset', 'acc_g_bandpassed', 'vel_cm_s', 'disp_cm']
+        self.columnHeaders = ['Ch', 'ID', 'Floor', 'Axis', 'Offset Acc (g)', 'Bandpassed Acc (g)', 'Vel (cm/s)', 'Disp (cm)']
         self.df = pd.DataFrame(columns=self.columnHeaders)
-        self.df['ID'] = getAllSensorCodesWithChannels()
+        self.populateStaticColumns()
+
+
+    def populateStaticColumns(self):
+        channels = [x for x in range(1, 25)]
+        self.df['Ch'] = channels
+        allSensorCodesWithChannels = getAllSensorCodesWithChannels()
+        self.df['ID'] = allSensorCodesWithChannels
+        floors = [getFloorCode(x) for x in allSensorCodesWithChannels]
+        self.df['Floor'] = floors
+        axes = [getAxis(x) for x in allSensorCodesWithChannels]
+        self.df['Axis'] = axes
 
 
     def updateStatsDf(self, sensorCodeWithChannel, statsColumnName, value):
@@ -1005,6 +1078,28 @@ class StatsTable:
         """
         return self.df[statsColumnName].max()
 
+
+    def printTable(self):
+        print(self.df)
+
+
+    def tableToPdf(self, workingDir):
+        """
+        convert stats table to pdf (via html)
+        workingDir: string holding absolute path of working directory where pdf will be stored
+        """
+        html = self.df.to_html(index=False, border=0)
+
+        tableTemplate = r'/home/grm/acc-data-conversion/shms-acceleration-conversion/stats_table_template.html'
+        with open(tableTemplate, 'r') as inFile:
+            newText = inFile.read().replace('insert table', html)
+
+        htmlFile = os.path.join(workingDir, 'stats_table.html')
+        with open(htmlFile, 'w') as outFile:
+            outFile.write(newText)
+
+        pdfFile = os.path.join(workingDir, 'stats_table.pdf')
+        pdfkit.from_file(htmlFile, pdfFile)
 
 
 # Comparison Figure objects were going to be used to display four plots but ...
