@@ -385,7 +385,11 @@ class Conversion:
 
     def printHeadTail(self):
         """print head and tail of self.df to console"""
+        print('columns')
+        print(self.df.columns)
+        print('head')
         print(self.df.head())
+        print('tail')
         print(self.df.tail())
 
 
@@ -402,12 +406,23 @@ class Conversion:
         eventTimestamp = eventTimestamp - pd.Timedelta('3 hours')
         startTime = eventTimestamp - pd.Timedelta('1 minute')
         endTime = startTime + pd.Timedelta('400 seconds')
+
+        startIndex = self.df.index[self.df['timestamp'] == startTime][0]
+        endIndex = self.df.index[self.df['timestamp'] == endTime][0]
+
+        #print('truncate start index: {0}'.format(startIndex))
+        #print('truncate end index: {0}'.format(endIndex))
+
+        # would prefer not to assign truncated df to self.df as now dealing with a copy of a slice
+        self.df = self.df.truncate(startIndex, endIndex, copy=False)
         
         # see caveats in pandas docs on this!!
-        self.df = self.df.loc[(self.df['timestamp'] > startTime) & (self.df['timestamp'] <= endTime)]
-        logging.info('start time: {}'.format(startTime))
-        logging.info('end time: {}'.format(endTime))
-        self.logHeadTail()
+        #self.df = self.df.loc[(self.df['timestamp'] > startTime) & (self.df['timestamp'] <= endTime)]
+        #print('start time: {}'.format(startTime))
+        #print('end time: {}'.format(endTime))
+        #print(len(self.df))
+        #print('head and tail after truncation')
+        #self.printHeadTail()
 
 
     def setSensitivity(self):
@@ -515,7 +530,9 @@ class Conversion:
 
 
     def clipDf(self):
-        self.df = self.df.iloc[self.ignoredSamples:40500].reset_index()
+        #self.df = self.df.iloc[self.ignoredSamples:40500].reset_index(drop=True, inplace=True)
+        self.df = self.df.truncate(self.ignoredSamples, 40500, copy=False)
+        self.df.reset_index(drop=True, inplace=True)
 
 
     def detrendData(self, inputColumn, outputColumn):
@@ -556,6 +573,11 @@ class Conversion:
         self.df[outputColumn] = self.df[inputColumn] * 100
 
 
+    # may not be used
+    def setTimestampAsIndex(self):
+        self.df.set_index('timestamp', inplace=True)
+
+
     def getStats(self, columnName):
         """
         get min, max, mean and peak value of self.df
@@ -566,35 +588,34 @@ class Conversion:
             2. float holding peak value (greater absolute value of min and max)
         """
 
-        minVal = round(self.df[columnName].min(), 3)
-        maxVal = round(self.df[columnName].max(), 3)
-        meanVal = round(self.df[columnName].mean(), 3)
+        minVal = self.df[columnName].min()
+        maxVal = self.df[columnName].max()
+        meanVal = self.df[columnName].mean()
 
-        '''
-        # get indexes of min and max values
-        try:
-            minValIndex = self.df.index[self.df[columnName] == minVal][0]
-        except: 
-            minValIndex = 30000
-        try:
-            maxValIndex = self.df.index[self.df[columnName] == maxVal][0]
-        except:
-            maxValIndex = 30000
+        # get indexes (or timestamps?) of min and max values
 
-        minPair = (minValIndex, minVal)
-        maxPair = (maxValIndex, maxVal)
+        minValIndex = self.df.index[self.df[columnName] == minVal][0]
+        #minValIndex = self.df.loc[self.df[columnName] == minVal, 'timestamp'][0]
+
+        maxValIndex = self.df.index[self.df[columnName] == maxVal][0]
+        #maxValIndex = self.df.loc[self.df[columnName] == maxVal, 'timestamp'][0]
+
+        minPair = [minValIndex, minVal]
+        maxPair = [maxValIndex, maxVal]
 
         if abs(minPair[1]) > abs(maxPair[1]):
             peakPair = minPair
         else:
             peakPair = maxPair
-        '''
+
+        peakPair[1] = round(peakPair[1], 3)
+
         peakVal = max(abs(minVal), abs(maxVal))
 
         logging.info('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
         stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         logging.info(stats)
-        return stats, peakPair
+        return peakPair
 
 
     def plotResultsGraph(self, canvasObject, column, titleSuffix, yLimit):
@@ -611,19 +632,17 @@ class Conversion:
 
         ax = canvasObject.figure.add_subplot(8, 3, subplotPos)
 
-        plot = self.df.reset_index().plot(kind='line', x='index', y=column, color='red', title=plotTitle, linewidth=0.5, ax=ax)
+        plot = self.df.reset_index().plot(kind='line', x='index', y=column, color='gray', title=plotTitle, linewidth=0.25, ax=ax)
 
         ax.set_ylim(-yLimit, yLimit)
         ax.xaxis.set_visible(False)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))
         ax.get_legend().remove()
 
-        # only text portion of stats will be shown on plot
-        #peakVal = self.getStats(column)[1]
-        #ax.annotate('peak: {0}'.format(peakVal), xy=(0.6, 0.65), xycoords='figure fraction')
+        # mark peak value and add text to plot
         x, y = self.getStats(column)
-        #ax.text(0.6, 0.65, 'peak: {0}'.format(peakVal), transform=ax.transAxes)
-        ax.text(x, y, 'peak: {0}'.format(y))
+        ax.plot(x, y, marker='o', color='red', markersize=2)
+        ax.text(0.6, 0.65, '{0}'.format(y), color='red', transform=ax.transAxes)
 
         # move this to Class constructor?
         canvasObject.figure.tight_layout()
@@ -637,7 +656,7 @@ class Conversion:
         """
         subplotPos = self.comparisonSubplotDict[self.floor]
         ax = canvasObject.figure.add_subplot(4, 1, subplotPos)
-        plot = self.df.reset_index().plot(kind='line', x='index', y='highpassed_displacement_cm', color='red', linewidth=1.0, ax=ax)
+        plot = self.df.reset_index().plot(kind='line', x='index', y='highpassed_displacement_cm', color='gray', linewidth=0.25, ax=ax)
         ax.set_ylim(-yLimit, yLimit)
         ax.xaxis.set_visible(False)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))
@@ -645,6 +664,11 @@ class Conversion:
             ax.set_title(canvasObject.windowTitle)
         ax.set_ylabel(self.sensorCodeWithChannel, rotation=0)
         ax.get_legend().remove()
+
+        # mark peak value and add text to plot
+        x, y = self.getStats('highpassed_displacement_cm')
+        ax.plot(x, y, marker='o', color='red', markersize=2)
+        ax.text(0.6, 0.65, '{0}'.format(y), color='red', transform=ax.transAxes)
 
         # only text portion of stats will be shown on plot
         #stats = self.getStats(column)[0]
@@ -869,8 +893,8 @@ class PrimaryUi(QMainWindow):
         plotArgs = self.getPlotArgs()
         for item in plotArgs:
             canvas, columnName, titleSuffix, maxVal = item
-            # add 1% of maxVal to maxVal to get range of plots along y-axis
-            yLimit = maxVal + maxVal * 0.01
+            # add 5% of maxVal to maxVal to get range of plots along y-axis
+            yLimit = maxVal + maxVal * 0.05
             # will probably need to create multiple df's in Conversion class for this (??)
             conversionObject.plotResultsGraph(canvas, columnName, titleSuffix, yLimit)
 
@@ -909,6 +933,7 @@ class PrimaryUi(QMainWindow):
         p2 = ProcessedFromTxtFile(txtFilePair[1])
         df2 = p2.df
         df = pd.concat([df1, df2])
+        df.reset_index(drop=True, inplace=True)
         return Conversion(df, p1.sensorCode, p1.sensorCodeWithChannel, self.eventTimestamp)            
 
 
