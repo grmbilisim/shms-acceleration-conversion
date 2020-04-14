@@ -2,6 +2,11 @@
 
 """Visualization and conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
 
+import time
+
+start_time = time.time()
+print(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+
 import sys
 import os
 import subprocess
@@ -315,7 +320,7 @@ class Conversion:
         # time between samples in seconds
         self.dt = 1/float(self.fs)
 
-        self.ignoredSamples = 6000
+        self.ignoredSamples = 6500
 
         self.resultsSubplotDict = {'B4Fx': 19,
                              'B4Fy': 20,
@@ -581,12 +586,13 @@ class Conversion:
 
     def getStats(self, columnName):
         """
-        get min, max, mean and peak value of self.df
+        get index of peak value and peak value itself
         (to be called after df has been clipped)
         columnName: string holding name of column in self.df
-        return: tuple holding:
-            1. string holding max and min (to be printed to console or on plots)
-            2. float holding peak value (greater absolute value of min and max)
+        return: list holding:
+            1. int holding index of peak value
+            2. float holding peak value
+            3. float holding peak value rounded to three decimal places
         """
 
         minVal = self.df[columnName].min()
@@ -605,18 +611,18 @@ class Conversion:
         maxPair = [maxValIndex, maxVal]
 
         if abs(minPair[1]) > abs(maxPair[1]):
-            peakPair = minPair
+            peakInfo = minPair
         else:
-            peakPair = maxPair
+            peakInfo = maxPair
 
-        peakPair[1] = round(peakPair[1], 3)
+        peakInfo.append(round(peakInfo[1], 3))
 
-        peakVal = max(abs(minVal), abs(maxVal))
+        #peakVal = max(abs(minVal), abs(maxVal))
 
         logging.info('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
         stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         logging.info(stats)
-        return peakPair
+        return peakInfo
 
 
     def plotResultsGraph(self, canvasObject, column, titleSuffix, yLimit):
@@ -641,9 +647,9 @@ class Conversion:
         ax.get_legend().remove()
 
         # mark peak value and add text to plot
-        x, y = self.getStats(column)
+        x, y, yText = self.getStats(column)
         ax.plot(x, y, marker='o', color='red', markersize=2)
-        ax.text(0.6, 0.65, '{0}'.format(y), color='red', transform=ax.transAxes)
+        ax.text(0.85, 0.85, '{0}'.format(yText), color='red', transform=ax.transAxes)
 
         # move this to Class constructor?
         canvasObject.figure.tight_layout()
@@ -667,9 +673,9 @@ class Conversion:
         ax.get_legend().remove()
 
         # mark peak value and add text to plot
-        x, y = self.getStats('highpassed_displacement_cm')
+        x, y, yText = self.getStats('highpassed_displacement_cm')
         ax.plot(x, y, marker='o', color='red', markersize=2)
-        ax.text(0.6, 0.65, '{0}'.format(y), color='red', transform=ax.transAxes)
+        ax.text(0.8, 0.85, '{0}'.format(yText), color='red', transform=ax.transAxes)
 
         # only text portion of stats will be shown on plot
         #stats = self.getStats(column)[0]
@@ -687,6 +693,7 @@ class PrimaryUi(QMainWindow):
         super().__init__()
 
         self.eventTimestamp = None
+        self.eventTimestampReadable = None
         self.miniseedDirPath = None
         self.miniseedFileList = None
         self.miniseedFileCount = None
@@ -759,6 +766,11 @@ class PrimaryUi(QMainWindow):
         logging.debug('miniseed file count: {}'.format(self.miniseedFileCount))
         if self.miniseedFileCount not in [24, 48]:
             raise ValueError('number of input miniseed files must be 24 or 48 - check directory holding miniseed files')  
+
+
+    def getReadableTimestamp(self):
+        eventTimestamp = pd.Timestamp(self.eventTimestamp)
+        self.eventTimestampReadable = eventTimestamp.strftime('%m/%d/%y %H:%M:%S')
 
 
     def setWorkingDir(self):
@@ -894,8 +906,8 @@ class PrimaryUi(QMainWindow):
         plotArgs = self.getPlotArgs()
         for item in plotArgs:
             canvas, columnName, titleSuffix, maxVal = item
-            # add 5% of maxVal to maxVal to get range of plots along y-axis
-            yLimit = maxVal + maxVal * 0.05
+            # add 15% of maxVal to maxVal to get range of plots along y-axis
+            yLimit = maxVal + maxVal * 0.15
             # will probably need to create multiple df's in Conversion class for this (??)
             conversionObject.plotResultsGraph(canvas, columnName, titleSuffix, yLimit)
 
@@ -977,22 +989,24 @@ class PrimaryUi(QMainWindow):
         pngPaths = [os.path.join(self.workingDir, f) for f in pngFiles]
         #coordsList = [(10, 10), (110, 10), (10, 155), (110, 155)]
         pdf.add_page()
+        pdf.set_font('Arial', 'B', 10)
+        pdf.cell(140, 10, 'Unconfirmed preliminary results for event: {0} UTC+3'.format(self.eventTimestampReadable))
         for path in pngPaths:
             if 'nx' in path:
-                x, y = (10, 10)
+                x, y = (10, 17)
             elif 'ny' in path:
-                x, y = (110, 10)
+                x, y = (110, 17)
             elif 'sx' in path:
-                x, y = (10, 155)
+                x, y = (10, 156)
             elif 'sy' in path:
-                x, y = (110, 155)
+                x, y = (110, 156)
             pdf.image(path, x, y, h=140)
         pdf.output(os.path.join(self.workingDir, 'displacement_comparison.pdf'), "F")
 
 
     def combinePdfs(self):
         """combine all pdfs into single report.pdf"""
-        pdfs = ['displacement_comparison.pdf', 'results.pdf', 'stats_table.pdf']
+        pdfs = ['displacement_comparison.pdf', 'results.pdf', 'stats_table_all.pdf', 'stats_table_acc.pdf']
         pdfPaths = [os.path.join(self.workingDir, f) for f in pdfs]
         merger = PdfFileMerger()
         for pdf in pdfPaths:
@@ -1035,12 +1049,15 @@ class PrimaryUi(QMainWindow):
                 self.drawComparisonPlot(c)
 
         self.showCanvases()
+        seconds = time.time() - start_time
+        print("--- {} minutes ---".format(seconds/60.0))
         
         self.saveResultsFiguresAsPdf()
         self.saveComparisonFigures()
         self.combineComparisonFigures()
         self.statsTable.printTable()
         self.statsTable.tableToPdf(self.workingDir)
+        self.statsTable.tableToPdf(self.workingDir, 'acceleration')
         self.combinePdfs()
 
 
@@ -1049,6 +1066,7 @@ class PrimaryUi(QMainWindow):
     def processUserInput(self):
         self.getEventTimestamp()
         self.getMiniseedDirPath()
+        self.getReadableTimestamp()
         self.setMiniseedFileInfo()
         self.setWorkingDir()
         self.convertMiniseedToAscii()
@@ -1106,25 +1124,35 @@ class StatsTable:
 
 
     def printTable(self):
+        """print stats table to console"""
         print(self.df)
 
 
-    def tableToPdf(self, workingDir):
+    def tableToPdf(self, workingDir, columns='all'):
         """
         convert stats table to pdf (via html)
         workingDir: string holding absolute path of working directory where pdf will be stored
+        columns = string holding 'all' for all columns or 'acceleration' for bandpassed acceleration only
         """
-        html = self.df.to_html(index=False, border=0)
+        if columns == 'all':
+            html = self.df.to_html(index=False, border=0)
+            htmlFilename = 'stats_table_all.html'
+            pdfFilename = 'stats_table_all.pdf'
+        elif columns == 'acceleration':
+            headers = ['Ch', 'ID', 'Floor', 'Axis', 'Bandpassed Acc (g)']
+            html = self.df[headers].to_html(index=False, border=0)
+            htmlFilename = 'stats_table_acc.html'
+            pdfFilename = 'stats_table_acc.pdf'
 
         tableTemplate = r'/home/grm/acc-data-conversion/shms-acceleration-conversion/stats_table_template.html'
         with open(tableTemplate, 'r') as inFile:
             newText = inFile.read().replace('insert table', html)
 
-        htmlFile = os.path.join(workingDir, 'stats_table.html')
+        htmlFile = os.path.join(workingDir, htmlFilename)
         with open(htmlFile, 'w') as outFile:
             outFile.write(newText)
 
-        pdfFile = os.path.join(workingDir, 'stats_table.pdf')
+        pdfFile = os.path.join(workingDir, pdfFilename)
         pdfkit.from_file(htmlFile, pdfFile)
 
 
