@@ -18,6 +18,7 @@ import logging
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtWidgets import QWidget
+#from PyQt5.QtWidgets import QDesktopWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QFileInfo
 from PyQt5.QtWidgets import QGridLayout
@@ -1156,7 +1157,24 @@ class BaseCanvas(QMainWindow):
 
         self.nav = NavigationToolbar(self.canvas, self.widget)
         self.widget.layout().addWidget(self.nav)
-        self.widget.layout().addWidget(self.scroll)    
+        self.widget.layout().addWidget(self.scroll)
+
+
+    # seems that use of QDesktopWidget() causes part of Navigation bar to turn black and/or not appear
+    '''
+    def setScreenLocation(self):
+        """set location of results canvases"""
+        availableGeom = QDesktopWidget().availableGeometry()
+        screenGeom = QDesktopWidget().screenGeometry()
+
+        widgetGeom = self.geometry()
+
+        x = screenGeom.width() - widgetGeom.width()
+        y = screenGeom.height() - widgetGeom.height()
+
+        self.move(x, y)
+    '''
+
 
 
 # ComparisonCanvas objects used to display four plots 
@@ -1165,8 +1183,8 @@ class BaseCanvas(QMainWindow):
 class ComparisonCanvas(BaseCanvas):
     def __init__(self, windowTitle):
         BaseCanvas.__init__(self, windowTitle, width=4, height=7)
+        self.setFixedSize(450, 800)
         
-
 
 # ResultsCanvas objects used to display plots for all 24 devices/channels
 # Class has one instance each of:
@@ -1175,6 +1193,8 @@ class ComparisonCanvas(BaseCanvas):
 class ResultsCanvas(BaseCanvas):
     def __init__(self, windowTitle):
         BaseCanvas.__init__(self, windowTitle)
+        self.setFixedSize(1470, 1000)
+        #self.setScreenLocation()
 
 
 
