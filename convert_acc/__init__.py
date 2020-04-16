@@ -1,4 +1,4 @@
-# Filename: convert_acc.py
+# Filename: __init__.py
 
 """Visualization and conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
 import sys
@@ -67,21 +67,33 @@ creating report similar to pages 3-5 of third-party report
 
 SENSOR_CODES = ('N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF')
 
-
-def getAllSensorCodesWithChannels():
-    """
-    Return list of 24 strings holding sensor codes with channels in form 'N39x'
-    (in order of those on page 5 of third-party report)
-    """
-    buildingSensorCodes = [c for c in SENSOR_CODES if c != 'FF']
-    axes = ['x', 'y', 'z']
-    allSensorCodesWithChannels = []
-    for p in buildingSensorCodes:
-        for a in axes:
-            allSensorCodesWithChannels.append(p + a)
-    farFieldCodes = ['FFN', 'FFW', 'FFZ']
-    allSensorCodesWithChannels += farFieldCodes
-    return allSensorCodesWithChannels
+# in order of those on page 5 of third-party report          
+SENSOR_CODES_WITH_CHANNELS = [
+                            'N39x',
+                            'N39y',
+                            'N39z',
+                            'S39x',
+                            'S39y',
+                            'S39z',
+                            'N24x',
+                            'N24y',
+                            'N24z',
+                            'S24x',
+                            'S24y',
+                            'S24z',
+                            'N12x',
+                            'N12y',
+                            'N12z',
+                            'S12x',
+                            'S12y',
+                            'S12z',
+                            'B4Fx',                             
+                            'B4Fy',
+                            'B4Fz',
+                            'FFN',
+                            'FFW',
+                            'FFZ'
+                            ]
 
 
 def getSensorCodeInfo(inputFile):
@@ -224,6 +236,8 @@ class ProcessedFromTxtFile:
             try:
                 ts = pd.Timestamp(item)
                 tsList.append(ts)
+            except:
+                pass
         earliestTs = tsList[0]
         if len(tsList) == 1:
             return earliestTs
@@ -299,30 +313,7 @@ class Conversion:
 
         self.ignoredSamples = 6000
 
-        self.resultsSubplotDict = {'B4Fx': 19,
-                                     'B4Fy': 20,
-                                     'B4Fz': 21,
-                                     'FFN': 22,
-                                     'FFW': 23,
-                                     'FFZ': 24,
-                                     'N12x': 13,
-                                     'N12y': 14,
-                                     'N12z': 15,
-                                     'N24x': 7,
-                                     'N24y': 8,
-                                     'N24z': 9,
-                                     'N39x': 1,
-                                     'N39y': 2,
-                                     'N39z': 3,
-                                     'S12x': 16,
-                                     'S12y': 17,
-                                     'S12z': 18,
-                                     'S24x': 10,
-                                     'S24y': 11,
-                                     'S24z': 12,
-                                     'S39x': 4,
-                                     'S39y': 5,
-                                     'S39z': 6}
+        self.resultsSubplotDict = dict(zip(SENSOR_CODES_WITH_CHANNELS, [x for x in range(1, 25)]))
 
         # key '4' refers to floor 'B4'
         self.comparisonSubplotDict = {'39': 1, '24': 2, '12': 3, '4': 4}
@@ -750,8 +741,7 @@ class PrimaryUi(QMainWindow):
             for t in txtFileSensorCodeList:
                 logging.debug('txtFileSensorCodeList tuple: {}'.format(t))
 
-            allSensorCodesWithChannels = getAllSensorCodesWithChannels()
-            for c in allSensorCodesWithChannels:
+            for c in SENSOR_CODES_WITH_CHANNELS:
                 pairedList = [f for f in txtFileSensorCodeList if c in f]
                 self.pairedTxtFileList.append(pairedList)
 
@@ -967,11 +957,10 @@ class StatsTable:
     def populateStaticColumns(self):
         channels = [x for x in range(1, 25)]
         self.df['Ch'] = channels
-        allSensorCodesWithChannels = getAllSensorCodesWithChannels()
-        self.df['ID'] = allSensorCodesWithChannels
-        floors = [getFloorCode(x) for x in allSensorCodesWithChannels]
+        self.df['ID'] = SENSOR_CODES_WITH_CHANNELS
+        floors = [getFloorCode(x) for x in SENSOR_CODES_WITH_CHANNELS]
         self.df['Floor'] = floors
-        axes = [getAxis(x) for x in allSensorCodesWithChannels]
+        axes = [getAxis(x) for x in SENSOR_CODES_WITH_CHANNELS]
         self.df['Axis'] = axes
 
     def updateStatsDf(self, sensorCodeWithChannel, statsColumnName, value):
@@ -1010,7 +999,7 @@ class StatsTable:
             htmlFilename = 'stats_table_acc.html'
             pdfFilename = 'stats_table_acc.pdf'
 
-        tableTemplate = r'/home/grm/acc-data-conversion/shms-acceleration-conversion/stats_table_template.html'
+        tableTemplate = r'/home/grm/acc-data-conversion/shms-acceleration-conversion/convert_acc/stats_table_template.html'
         with open(tableTemplate, 'r') as inFile:
             newText = inFile.read().replace('insert table', html)
 
