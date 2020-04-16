@@ -1,60 +1,50 @@
 # Filename: convert_acc.py
 
 """Visualization and conversion of accelerometer data to velocity and displacement using Python and PyQt5."""
-
-import time
-
-start_time = time.time()
-print(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-
 import sys
 import os
 import subprocess
 import pandas as pd
 import numpy as np
 from scipy.signal import butter, lfilter, detrend
-import math
 from fpdf import FPDF
 from PyPDF2 import PdfFileMerger
 import logging
-
-# Import QApplication and the required widgets from PyQt5.QtWidgets
-
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtWidgets import QWidget
-#from PyQt5.QtWidgets import QDesktopWidget
-from PyQt5.QtCore import Qt
-from PyQt5.QtCore import QFileInfo
-from PyQt5.QtWidgets import QGridLayout
+# from PyQt5.QtCore import Qt
+# from PyQt5.QtCore import QFileInfo
+# from PyQt5.QtWidgets import QGridLayout
 from PyQt5.QtWidgets import QLineEdit
-from PyQt5.QtWidgets import QTextEdit
+# from PyQt5.QtWidgets import QTextEdit
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QLabel
-from PyQt5.QtWidgets import QDialog
-from PyQt5.QtWidgets import QDialogButtonBox
-from PyQt5.QtWidgets import QFormLayout
-from PyQt5.QtWidgets import QFileDialog
-from PyQt5.QtWidgets import QErrorMessage
-
-from PyQt5.QtPrintSupport import QPrinter
-from PyQt5.QtGui import QPainter
+# from PyQt5.QtWidgets import QDialog
+# from PyQt5.QtWidgets import QDialogButtonBox
+# from PyQt5.QtWidgets import QFormLayout
+# from PyQt5.QtWidgets import QFileDialog
+# from PyQt5.QtWidgets import QErrorMessage
+# from PyQt5.QtPrintSupport import QPrinter
+# from PyQt5.QtGui import QPainter
 from PyQt5.QtWidgets import QButtonGroup
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtWidgets import QScrollArea
-
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-
 import pdfkit
+import time
 
 
 __version__ = '0.1'
 __author__ = 'Nick LiBassi'
+
+start_time = time.time()
+print(time.strftime("start time after imports: %a, %d %b %Y %H:%M:%S", time.localtime()))
 
 ERROR_MSG = 'ERROR'
 
@@ -64,13 +54,13 @@ logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s -
 """
 General Notes:
 use camelCase throughout as Qt uses it
-remove unused imports leftover from calculator app
+remove unused imports leftover from template app
 
 moved functionality from Controller class to PrimaryUi class
 
 can handle either 24 or 48 input miniseed files
 
-creating report similar to pages 3-4 of Safe Report
+creating report similar to pages 3-5 of third-party report
 """
 
 # move all helper functions into a public class?
@@ -81,7 +71,7 @@ SENSOR_CODES = ('N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF')
 def getAllSensorCodesWithChannels():
     """
     Return list of 24 strings holding sensor codes with channels in form 'N39x'
-    (in order of those on page 5 of Safe Report)
+    (in order of those on page 5 of third-party report)
     """
     buildingSensorCodes = [c for c in SENSOR_CODES if c != 'FF']
     axes = ['x', 'y', 'z']
@@ -98,7 +88,6 @@ def getSensorCodeInfo(inputFile):
     """
     Return strings holding sensor code only (ex. 'B4F') and sensor code with channel (ex. 'B4Fx')
     In far field cases, these will be identical ('FFW', 'FFN', 'FFZ')
-    args:
     inputFile: string holding either filename or path of .txt or .m file
     """
     # get string holding file extension - either 'txt' or 'm' (without dot)
@@ -158,7 +147,6 @@ def getAxis(sensorCodeWithChannel):
 def getTimeText(inputFile):
     """
     Get hour (int) and full timestamp (string) from given miniseed or text file name.
-    args:
     inputFile: string holding either filename or path of .txt or .m file
     return:
     tuple in form: (int holding hour between 0-23, string holding full timestamp)
@@ -216,20 +204,17 @@ class ProcessedFromTxtFile:
         self.setHeaderList()
         self.getDfWithTimestampedCounts()
 
-
     def convertTxtToDf(self):
         """convert given text file to pandas dataframe"""
         self.df = pd.read_csv(self.txtFilePath, header=0)
-
 
     def setHeaderList(self):
         """set header list for object from dataframe columns"""
         self.headerList = [item for item in list(self.df.columns.values)]
 
-
     def getFirstTimestamp(self):
         """
-        get earliest pandas timestamp from among column headers 
+        get earliest pandas timestamp from among column headers
         (which will contain either one or two timestamps)
         return: pandas Timestamp object
         """
@@ -239,8 +224,6 @@ class ProcessedFromTxtFile:
             try:
                 ts = pd.Timestamp(item)
                 tsList.append(ts)
-            except:
-                pass
         earliestTs = tsList[0]
         if len(tsList) == 1:
             return earliestTs
@@ -249,11 +232,10 @@ class ProcessedFromTxtFile:
                 earliestTs = tsList[1]
             return earliestTs
 
-
     def getCountColumnHeader(self):
         """
         get column header that contains count values
-        return: string holding name of column holding count values 
+        return: string holding name of column holding count values
         """
         countHeader = None
         for header in self.headerList:
@@ -264,7 +246,6 @@ class ProcessedFromTxtFile:
                 countHeader = header
                 logging.debug(countHeader)
                 return countHeader
-
 
     def getDfWithTimestampedCounts(self):
         """arrange self.df to contain only timestamp and count columns"""
@@ -286,27 +267,23 @@ class ProcessedFromTxtFile:
         logging.info(self.df.head())
 
 
-# class used to convert data (from single dataframe) from 
+# class used to convert data (from single dataframe) from
 # count to acceleration, velocity, and displacement
 class Conversion:
     def __init__(self, df, sensorCode, sensorCodeWithChannel, eventTimestamp):
-        #self.ui = ui
         self.df = df
         self.sensorCode = sensorCode
         self.sensorCodeWithChannel = sensorCodeWithChannel
         self.floor = getFloor(self.sensorCode)
         self.eventTimestamp = eventTimestamp
-
         self.sensitivity = None
-        self.accRawStats = None
+        # self.accRawStats = None
         self.accOffsetStats = None
         self.accBandpassedStats = None
         self.velStats = None
         self.dispStats = None
-
         self.workingBaseDir = "/home/grm/acc-data-conversion/working"
         self.workingDir = os.path.join(self.workingBaseDir, self.eventTimestamp)
-        #self.plotDir = "/home/grm/acc-data-conversion/working/no_ui/plots"
 
         # these may be taken from user in future
         # low cutoff frequency for bandpass and highpass filters
@@ -318,34 +295,34 @@ class Conversion:
         # order of filters
         self.order = 2
         # time between samples in seconds
-        self.dt = 1/float(self.fs)
+        self.dt = 1 / float(self.fs)
 
-        self.ignoredSamples = 6500
+        self.ignoredSamples = 6000
 
         self.resultsSubplotDict = {'B4Fx': 19,
-                             'B4Fy': 20,
-                             'B4Fz': 21,
-                             'FFN': 22,
-                             'FFW': 23,
-                             'FFZ': 24,
-                             'N12x': 13,
-                             'N12y': 14,
-                             'N12z': 15,
-                             'N24x': 7,
-                             'N24y': 8,
-                             'N24z': 9,
-                             'N39x': 1,
-                             'N39y': 2,
-                             'N39z': 3,
-                             'S12x': 16,
-                             'S12y': 17,
-                             'S12z': 18,
-                             'S24x': 10,
-                             'S24y': 11,
-                             'S24z': 12,
-                             'S39x': 4,
-                             'S39y': 5,
-                             'S39z': 6}
+                                     'B4Fy': 20,
+                                     'B4Fz': 21,
+                                     'FFN': 22,
+                                     'FFW': 23,
+                                     'FFZ': 24,
+                                     'N12x': 13,
+                                     'N12y': 14,
+                                     'N12z': 15,
+                                     'N24x': 7,
+                                     'N24y': 8,
+                                     'N24z': 9,
+                                     'N39x': 1,
+                                     'N39y': 2,
+                                     'N39z': 3,
+                                     'S12x': 16,
+                                     'S12y': 17,
+                                     'S12z': 18,
+                                     'S24x': 10,
+                                     'S24y': 11,
+                                     'S24z': 12,
+                                     'S39x': 4,
+                                     'S39y': 5,
+                                     'S39z': 6}
 
         # key '4' refers to floor 'B4'
         self.comparisonSubplotDict = {'39': 1, '24': 2, '12': 3, '4': 4}
@@ -356,38 +333,27 @@ class Conversion:
         self.addZeroPad()
         self.convertGToOffsetG()
         self.convertGToMetric()
-
         self.butterBandpassFilter('offset_g', 'bandpassed_g')
         self.butterBandpassFilter('acc_ms2', 'bandpassed_ms2')
-
         self.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
-
         self.clipDf()
-
         self.detrendData('velocity_ms', 'detrended_velocity_ms')
-
         self.convertMToCm('detrended_velocity_ms', 'detrended_velocity_cms')
-        
         self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
-
         self.detrendData('displacement_m', 'detrended_displacement_m')
-
         self.butterHighpassFilter('detrended_displacement_m', 'highpassed_displacement_m')
-
         self.convertMToCm('highpassed_displacement_m', 'highpassed_displacement_cm')
 
-        self.accRawStats = self.getStats('g')
+        # self.accRawStats = self.getStats('g')
         self.accOffsetStats = self.getStats('offset_g')
         self.accBandpassedStats = self.getStats('bandpassed_g')
         self.velStats = self.getStats('detrended_velocity_cms')
         self.dispStats = self.getStats('highpassed_displacement_cm')
 
-
     def logHeadTail(self):
         """print head and tail of self.df to console"""
         logging.debug(self.df.head())
         logging.debug(self.df.tail())
-
 
     def printHeadTail(self):
         """print head and tail of self.df to console"""
@@ -398,12 +364,10 @@ class Conversion:
         print('tail')
         print(self.df.tail())
 
-
     def truncateDf(self):
         """
         truncate self.df based on timestamp for known time event
-        args: 
-        eventTimestamp: string holding timestamp (same as event dir name) 
+        eventTimestamp: string holding timestamp (same as event dir name)
         in format: '2020-01-13T163712'
         """
         # convert string timestamp to pandas Timestamp instance
@@ -416,26 +380,13 @@ class Conversion:
         startIndex = self.df.index[self.df['timestamp'] == startTime][0]
         endIndex = self.df.index[self.df['timestamp'] == endTime][0]
 
-        #print('truncate start index: {0}'.format(startIndex))
-        #print('truncate end index: {0}'.format(endIndex))
-
         # would prefer not to assign truncated df to self.df as now dealing with a copy of a slice
         self.df = self.df.truncate(startIndex, endIndex, copy=False)
-        
-        # see caveats in pandas docs on this!!
-        #self.df = self.df.loc[(self.df['timestamp'] > startTime) & (self.df['timestamp'] <= endTime)]
-        #print('start time: {}'.format(startTime))
-        #print('end time: {}'.format(endTime))
-        #print(len(self.df))
-        #print('head and tail after truncation')
-        #self.printHeadTail()
-
 
     def setSensitivity(self):
         """
         return float holding sensitivity in V/g based on sensorCode
         """
-        # CHECK AUTOPRO REPORT ON THIS - FF SHOULD GET SAME AS GROUND FLOOR
         groundFloorSensorCodes = [c for c in SENSOR_CODES if c.endswith('F')]
         upperFloorSensorCodes = [c for c in SENSOR_CODES if not c.endswith('F')]
         for code in groundFloorSensorCodes:
@@ -449,14 +400,11 @@ class Conversion:
         else:
             raise ValueError('Non-null value must be assigned to sensitivity.')
 
-
     def convertCountToG(self):
         """
         add new column to df holding acceleration in g (converted from raw counts)
         """
-        self.df['g'] = self.df['count'] * (2.5/8388608) * (1/self.sensitivity)
-        #self.logHeadTail()
-
+        self.df['g'] = self.df['count'] * (2.5 / 8388608) * (1 / self.sensitivity)
 
     def addZeroPad(self, padLength=500, location='both'):
         """
@@ -475,24 +423,16 @@ class Conversion:
         paddedTimestamp.reset_index(drop=True, inplace=True)
         paddedG.reset_index(drop=True, inplace=True)
         paddedData = {'timestamp': paddedTimestamp, 'g': paddedG}
-        self.df = pd.DataFrame(paddedData, columns=['timestamp','g'])
-
+        self.df = pd.DataFrame(paddedData, columns=['timestamp', 'g'])
 
     def convertGToOffsetG(self):
         """add new column to df where mean of g has been removed"""
-        #gMean = self.df['g'].mean(axis=0)
-        #self.df['offset_g'] = self.df['g'] - gMean
-        #print('mean of g: {0} subtracted from g for {1}'.format(gMean, self.sensorCodeWithChannel))
-        
-        # gives same result as above
         self.df['offset_g'] = detrend(self.df['g'], type='constant')
-
 
     def convertGToMetric(self):
         """add new column to df showing acceleration in m/s^2"""
         self.df['acc_ms2'] = self.df['offset_g'] * 9.80665
         self.logHeadTail()
-
 
     def butterBandpass(self):
         """
@@ -506,10 +446,8 @@ class Conversion:
         low = self.lowcut / nyq
         high = self.highcut / nyq
         b, a = butter(self.order, [low, high], btype='band')
-        #b, a = butter(self.order, low, btype='highpass')
         logging.info('butterworth coefficients - b: {0}, a: {1}'.format(b, a))
         return b, a
-
 
     def butterBandpassFilter(self, inputColumn, outputColumn):
         """
@@ -520,7 +458,6 @@ class Conversion:
         b, a = self.butterBandpass()
         self.df[outputColumn] = lfilter(b, a, self.df[inputColumn])
 
-
     def integrateDfColumn(self, inputColumn, outputColumn):
         """integrate given dataframe column (given as string)"""
         inputList = list(self.df[inputColumn])
@@ -529,16 +466,13 @@ class Conversion:
         # values will be appended to integratedList
         integratedList = [0]
         for z in zipped:
-            integrated = self.dt * (z[0] + z[1])/2. + integratedList[-1]
+            integrated = self.dt * (z[0] + z[1]) / 2. + integratedList[-1]
             integratedList.append(integrated)
         self.df[outputColumn] = integratedList
 
-
     def clipDf(self):
-        #self.df = self.df.iloc[self.ignoredSamples:40500].reset_index(drop=True, inplace=True)
         self.df = self.df.truncate(self.ignoredSamples, 40500, copy=False)
         self.df.reset_index(drop=True, inplace=True)
-
 
     def detrendData(self, inputColumn, outputColumn):
         """
@@ -546,10 +480,7 @@ class Conversion:
         (will get called after data is clipped so as not to include extreme values
         that would skew the mean)
         """
-        #mean = df.iloc[self.ignoredSamples:40500].mean()
-        #df[outputColumn] = df[inputColumn] - mean
         self.df[outputColumn] = detrend(self.df[inputColumn], type='constant')
-
 
     def butterHighpass(self):
         """
@@ -560,8 +491,6 @@ class Conversion:
         cutoff = self.lowcut / nyq
         b, a = butter(self.order, cutoff, btype='high')
         return b, a
-        return b, a
-
 
     def butterHighpassFilter(self, inputColumn, outputColumn):
         """
@@ -570,18 +499,15 @@ class Conversion:
         b, a = self.butterHighpass()
         self.df[outputColumn] = lfilter(b, a, self.df[inputColumn])
 
-
     def convertMToCm(self, inputColumn, outputColumn):
         """
         convert values in meters to values in centimeters
         """
         self.df[outputColumn] = self.df[inputColumn] * 100
 
-
     # may not be used
     def setTimestampAsIndex(self):
         self.df.set_index('timestamp', inplace=True)
-
 
     def getStats(self, columnName):
         """
@@ -598,13 +524,9 @@ class Conversion:
         maxVal = self.df[columnName].max()
         meanVal = self.df[columnName].mean()
 
-        # get indexes (or timestamps?) of min and max values
-
+        # get indexes of min and max values
         minValIndex = self.df.index[self.df[columnName] == minVal][0]
-        #minValIndex = self.df.loc[self.df[columnName] == minVal, 'timestamp'][0]
-
         maxValIndex = self.df.index[self.df[columnName] == maxVal][0]
-        #maxValIndex = self.df.loc[self.df[columnName] == maxVal, 'timestamp'][0]
 
         minPair = [minValIndex, minVal]
         maxPair = [maxValIndex, maxVal]
@@ -616,13 +538,10 @@ class Conversion:
 
         peakInfo.append(round(peakInfo[1], 4))
 
-        #peakVal = max(abs(minVal), abs(maxVal))
-
         logging.info('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
         stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
         logging.info(stats)
         return peakInfo
-
 
     def plotResultsGraph(self, canvasObject, column, titleSuffix, yLimit):
         """
@@ -652,7 +571,6 @@ class Conversion:
 
         # move this to Class constructor?
         canvasObject.figure.tight_layout()
-        
 
     def plotComparisonGraph(self, canvasObject, yLimit):
         """
@@ -676,14 +594,10 @@ class Conversion:
         ax.plot(x, y, marker='o', color='red', markersize=2)
         ax.text(0.8, 0.85, '{0}'.format(yText), color='red', transform=ax.transAxes)
 
-        # only text portion of stats will be shown on plot
-        #stats = self.getStats(column)[0]
-        #ax.annotate(stats, xy=(0.6, 0.65), xycoords='figure fraction')
-
         canvasObject.figure.tight_layout()
 
 
-# Create a subclass of QMainWindow to set up the portion of GUI 
+# Create a subclass of QMainWindow to set up the portion of GUI
 # to take information from user and serve as controller of program
 class PrimaryUi(QMainWindow):
     """AccConvert's initial view for taking input from user."""
@@ -696,16 +610,12 @@ class PrimaryUi(QMainWindow):
         self.miniseedDirPath = None
         self.miniseedFileList = None
         self.miniseedFileCount = None
-        
         self.workingBaseDir = "/home/grm/acc-data-conversion/working"
         self.workingDir = None
-
         self.txtFileList = None
         self.txtFileCount = None
-
         self.pairedTxtFileList = []
 
-        # ************moved from old Controller class
         self.statsTable = StatsTable()
         self.offsetGResultsCanvas = ResultsCanvas('Acceleration (g)')
         self.bandpassedGResultsCanvas = ResultsCanvas('Bandpassed Acceleration (g)')
@@ -717,8 +627,8 @@ class PrimaryUi(QMainWindow):
         self.conversionColumnNames = ['offset_g', 'bandpassed_g', 'detrended_velocity_cms', 'highpassed_displacement_cm']
         self.titleSuffixes = ['offset acceleration (g)', 'bandpassed acceleration (g)', 'detrended velocity (cm/s)', 'highpassed displacement (cm)']
         self.resultsCanvases = [self.offsetGResultsCanvas, self.bandpassedGResultsCanvas, self.velResultsCanvas, self.dispResultsCanvas]
-        # ************
-        # self.statsColumnMaxValues will hold peak values in same order as self.conversionColumnNames 
+
+        # self.statsColumnMaxValues will hold peak values in same order as self.conversionColumnNames
         self.statsColumnMaxValues = None
 
         self.NXcomparisonCanvas = ComparisonCanvas('N. Corner X-Dir (cm)')
@@ -728,7 +638,6 @@ class PrimaryUi(QMainWindow):
 
         # retain current order of self.comparisonCanvases
         self.comparisonCanvases = [self.NXcomparisonCanvas, self.NYcomparisonCanvas, self.SXcomparisonCanvas, self.SYcomparisonCanvas]
- 
         self.allCanvases = self.resultsCanvases + self.comparisonCanvases
         self.comparisonPngNames = ['nx.png', 'ny.png', 'sx.png', 'sy.png']
 
@@ -740,23 +649,19 @@ class PrimaryUi(QMainWindow):
         self.centralWidget = QWidget(self)
         self.setCentralWidget(self.centralWidget)
         self.centralWidget.setLayout(self.generalLayout)
-        
         # Create the display and the buttons
         self.createTextInputFields()
         self.createRadioButtons()
         self.createSubmitButton()
-
 
     def getEventTimestamp(self):
         """Get user input (string) for event id field"""
         logging.debug(self.eventField.text())
         self.eventTimestamp = self.eventField.text()
 
-
     def getMiniseedDirPath(self):
         """Get user input (string) for miniseed directory path"""
         self.miniseedDirPath = self.miniseedDirField.text()
-
 
     def setMiniseedFileInfo(self):
         """Get number of input miniseed files (must be either 24 or 48)"""
@@ -764,13 +669,11 @@ class PrimaryUi(QMainWindow):
         self.miniseedFileCount = len(self.miniseedFileList)
         logging.debug('miniseed file count: {}'.format(self.miniseedFileCount))
         if self.miniseedFileCount not in [24, 48]:
-            raise ValueError('number of input miniseed files must be 24 or 48 - check directory holding miniseed files')  
-
+            raise ValueError('number of input miniseed files must be 24 or 48 - check directory holding miniseed files')
 
     def getReadableTimestamp(self):
         eventTimestamp = pd.Timestamp(self.eventTimestamp)
         self.eventTimestampReadable = eventTimestamp.strftime('%m/%d/%y %H:%M:%S')
-
 
     def setWorkingDir(self):
         """
@@ -782,10 +685,9 @@ class PrimaryUi(QMainWindow):
         if not os.path.isdir(self.workingDir):
             os.mkdir(self.workingDir)
 
-
     def convertMiniseedToAscii(self):
         """
-        Convert all miniseed files in miniseed directory to ascii files 
+        Convert all miniseed files in miniseed directory to ascii files
         """
         for f in self.miniseedFileList:
             basename = f.rsplit(".m")[0]
@@ -793,7 +695,6 @@ class PrimaryUi(QMainWindow):
             outPath = os.path.join(self.workingDir, filename)
             os.chdir(self.miniseedDirPath)
             subprocess.run(["./mseed2ascii", f, "-o", outPath])
-
 
     def createTextInputFields(self):
         """Create text input fields"""
@@ -808,8 +709,8 @@ class PrimaryUi(QMainWindow):
         self.generalLayout.addWidget(self.miniseedDirLabel)
         self.generalLayout.addWidget(self.miniseedDirField)
 
-
     def createRadioButtons(self):
+        """Create radio buttons"""
         self.approachGroup = QButtonGroup(self.centralWidget)
         self.timePlain = QRadioButton('Time-domain conversion')
         self.timePlain.setChecked(True)
@@ -827,7 +728,6 @@ class PrimaryUi(QMainWindow):
         self.generalLayout.addWidget(self.freqCorrection)
         self.generalLayout.addWidget(self.freqPlain)
 
-
     def setTxtFileInfo(self):
         """Set list of sorted input text file paths and number of text files"""
         self.txtFileList = [os.path.join(self.workingDir, f) for f in os.listdir(self.workingDir)]
@@ -835,7 +735,6 @@ class PrimaryUi(QMainWindow):
         self.txtFileCount = len(self.txtFileList)
         for path in self.txtFileList:
             logging.debug('txt file path: {0}'.format(path))
-
 
     def pairDeviceTxtFiles(self):
         """
@@ -854,13 +753,11 @@ class PrimaryUi(QMainWindow):
             allSensorCodesWithChannels = getAllSensorCodesWithChannels()
             for c in allSensorCodesWithChannels:
                 pairedList = [f for f in txtFileSensorCodeList if c in f]
-                self.pairedTxtFileList.append(pairedList)    
+                self.pairedTxtFileList.append(pairedList)
 
-
-    #*************************
     def updateStatsTable(self, conversionObject):
         """update row of stats table with max values at each of the (currently four) parameters"""
-        accRawPeakVal = conversionObject.accRawStats[2]
+        # accRawPeakVal = conversionObject.accRawStats[2]
         accOffsetPeakVal = conversionObject.accOffsetStats[2]
         accBandpassedPeakVal = conversionObject.accBandpassedStats[2]
         velPeakVal = conversionObject.velStats[2]
@@ -870,7 +767,6 @@ class PrimaryUi(QMainWindow):
         self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[1], accBandpassedPeakVal)
         self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[2], velPeakVal)
         self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[3], dispPeakVal)
-
 
     def getStatsMaxValues(self):
         """
@@ -882,9 +778,7 @@ class PrimaryUi(QMainWindow):
         for column in self.statsColumnNames:
             columnMaxValues.append(self.statsTable.getColumnMax(column))
         print('max values of {0}:\n{1}'.format(self.statsColumnNames, columnMaxValues))
-        #statsDict = dict(zip(conversionColumnNames, columnMaxValues))
         return columnMaxValues
-
 
     def getPlotArgs(self):
         """
@@ -896,10 +790,9 @@ class PrimaryUi(QMainWindow):
         plotArgs = zip(self.resultsCanvases, self.conversionColumnNames, self.titleSuffixes, self.statsColumnMaxValues)
         return plotArgs
 
-
     def drawResultsPlots(self, conversionObject):
         """
-        draw all (currently four) plots associated with given conversionObject 
+        draw all (currently four) plots associated with given conversionObject
         conversionObject: instance of the Conversion class
         """
         plotArgs = self.getPlotArgs()
@@ -907,9 +800,7 @@ class PrimaryUi(QMainWindow):
             canvas, columnName, titleSuffix, maxVal = item
             # add 15% of maxVal to maxVal to get range of plots along y-axis
             yLimit = maxVal + maxVal * 0.15
-            # will probably need to create multiple df's in Conversion class for this (??)
             conversionObject.plotResultsGraph(canvas, columnName, titleSuffix, yLimit)
-
 
     def drawComparisonPlot(self, conversionObject):
         """
@@ -925,14 +816,13 @@ class PrimaryUi(QMainWindow):
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['S', 'y']):
             conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
 
-        # modify this so these appear on the x or y canvases no matter what (will be repeated)
+        # B4 data to appear on the x or y canvases no matter what
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['B', 'x']):
             conversionObject.plotComparisonGraph(self.SXcomparisonCanvas, displacementMaxVal)
             conversionObject.plotComparisonGraph(self.NXcomparisonCanvas, displacementMaxVal)
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['B', 'y']):
             conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
             conversionObject.plotComparisonGraph(self.NYcomparisonCanvas, displacementMaxVal)
-
 
     def getConversionObjectFromTwoTxtFiles(self, txtFilePair):
         """
@@ -946,8 +836,7 @@ class PrimaryUi(QMainWindow):
         df2 = p2.df
         df = pd.concat([df1, df2])
         df.reset_index(drop=True, inplace=True)
-        return Conversion(df, p1.sensorCode, p1.sensorCodeWithChannel, self.eventTimestamp)            
-
+        return Conversion(df, p1.sensorCode, p1.sensorCodeWithChannel, self.eventTimestamp)
 
     def getConversionObjectFromOneTxtFile(self, txtFile):
         """
@@ -958,11 +847,9 @@ class PrimaryUi(QMainWindow):
         df = p.df
         return Conversion(df, p.sensorCode, p.sensorCodeWithChannel, self.eventTimestamp)
 
-
     def showCanvases(self):
         for canvas in self.allCanvases:
             canvas.show()
-
 
     def saveResultsFiguresAsPdf(self):
         """save results figures to a single pdf"""
@@ -972,7 +859,6 @@ class PrimaryUi(QMainWindow):
             pdf.savefig(canvas.figure)
         pdf.close()
 
-
     def saveComparisonFigures(self):
         """save comparison figures as individual png files"""
         comparisonCanvasDict = dict(zip(self.comparisonCanvases, self.comparisonPngNames))
@@ -980,13 +866,11 @@ class PrimaryUi(QMainWindow):
             pngPath = os.path.join(self.workingDir, comparisonCanvasDict[canvas])
             canvas.figure.savefig(pngPath)
 
-
     def combineComparisonFigures(self):
         """combine comparison png files into single (one-page) pdf"""
         pdf = FPDF()
         pngFiles = [f for f in os.listdir(self.workingDir) if f in self.comparisonPngNames]
         pngPaths = [os.path.join(self.workingDir, f) for f in pngFiles]
-        #coordsList = [(10, 10), (110, 10), (10, 155), (110, 155)]
         pdf.add_page()
         pdf.set_font('Arial', 'B', 10)
         pdf.cell(140, 10, 'Unconfirmed preliminary results for event: {0} UTC+3'.format(self.eventTimestampReadable))
@@ -1002,7 +886,6 @@ class PrimaryUi(QMainWindow):
             pdf.image(path, x, y, h=140)
         pdf.output(os.path.join(self.workingDir, 'displacement_comparison.pdf'), "F")
 
-
     def combinePdfs(self):
         """combine all pdfs into single report.pdf"""
         pdfs = ['displacement_comparison.pdf', 'results.pdf', 'stats_table_all.pdf', 'stats_table_acc.pdf']
@@ -1014,20 +897,14 @@ class PrimaryUi(QMainWindow):
         merger.write(os.path.join(self.workingDir, 'report_{0}.pdf'.format(self.eventTimestamp)))
         merger.close()
 
-
     def getResults(self):
         """
         perform conversions for all datasets (24 datasets from 24 or 48 text files)
-        call drawResultsPlots() to plot acceleration, velocity, and displacement for all datasets 
+        call drawResultsPlots() to plot acceleration, velocity, and displacement for all datasets
         """
         if self.pairedTxtFileList:
             for pair in self.pairedTxtFileList:
                 c = self.getConversionObjectFromTwoTxtFiles(pair)
-
-                # export df to csv if necessary
-                #outCsv = os.path.join(c.workingDir, c.sensorCodeWithChannel + '.csv')
-                #c.df.to_csv(outCsv)
-
                 self.updateStatsTable(c)
             self.statsColumnMaxValues = self.getStatsMaxValues()
 
@@ -1049,8 +926,8 @@ class PrimaryUi(QMainWindow):
 
         self.showCanvases()
         seconds = time.time() - start_time
-        print("--- {} minutes ---".format(seconds/60.0))
-        
+        print("--- {} minutes ---".format(seconds / 60.0))
+
         self.saveResultsFiguresAsPdf()
         self.saveComparisonFigures()
         self.combineComparisonFigures()
@@ -1058,9 +935,6 @@ class PrimaryUi(QMainWindow):
         self.statsTable.tableToPdf(self.workingDir)
         self.statsTable.tableToPdf(self.workingDir, 'acceleration')
         self.combinePdfs()
-
-
-    #****************************
 
     def processUserInput(self):
         self.getEventTimestamp()
@@ -1073,7 +947,6 @@ class PrimaryUi(QMainWindow):
         self.pairDeviceTxtFiles()
         self.getResults()
 
-
     def createSubmitButton(self):
         """Create single submit button"""
         self.submitBtn = QPushButton(self)
@@ -1084,13 +957,12 @@ class PrimaryUi(QMainWindow):
 
 
 # table holding peak values for acceleration, velocity, and displacement for each
-# channel of each device (modeled after Safe Report)
+# channel of each device (modeled after third-party report)
 class StatsTable:
     def __init__(self):
         self.columnHeaders = ['Ch', 'ID', 'Floor', 'Axis', 'Offset Acc (g)', 'Bandpassed Acc (g)', 'Vel (cm/s)', 'Disp (cm)']
         self.df = pd.DataFrame(columns=self.columnHeaders)
         self.populateStaticColumns()
-
 
     def populateStaticColumns(self):
         channels = [x for x in range(1, 25)]
@@ -1102,7 +974,6 @@ class StatsTable:
         axes = [getAxis(x) for x in allSensorCodesWithChannels]
         self.df['Axis'] = axes
 
-
     def updateStatsDf(self, sensorCodeWithChannel, statsColumnName, value):
         """
         update stats dataframe where 'ID' equals sensorCodeWithChannel
@@ -1110,9 +981,7 @@ class StatsTable:
         statsColumnName: string holding name of stats table dataframe column to be updated
         value: value to be set in statsDf (will come from stats of Conversion object)
         """
-        #statsColumnName = self.columnDict[conversionColumnName]
         self.df.loc[self.df['ID'] == sensorCodeWithChannel, statsColumnName] = value
-
 
     def getColumnMax(self, statsColumnName):
         """
@@ -1121,11 +990,9 @@ class StatsTable:
         """
         return self.df[statsColumnName].max()
 
-
     def printTable(self):
         """print stats table to console"""
         print(self.df)
-
 
     def tableToPdf(self, workingDir, columns='all'):
         """
@@ -1174,7 +1041,7 @@ class BaseCanvas(QMainWindow):
         self.setCentralWidget(self.widget)
         self.vbox = QVBoxLayout()
         self.widget.setLayout(self.vbox)
-        self.widget.layout().setContentsMargins(0,0,0,0)
+        self.widget.layout().setContentsMargins(0, 0, 0, 0)
         self.widget.layout().setSpacing(0)
 
         self.canvas = FigureCanvas(self.figure)
@@ -1185,7 +1052,6 @@ class BaseCanvas(QMainWindow):
         self.nav = NavigationToolbar(self.canvas, self.widget)
         self.widget.layout().addWidget(self.nav)
         self.widget.layout().addWidget(self.scroll)
-
 
     # seems that use of QDesktopWidget() causes part of Navigation bar to turn black and/or not appear
     '''
@@ -1203,26 +1069,23 @@ class BaseCanvas(QMainWindow):
     '''
 
 
-
-# ComparisonCanvas objects used to display four plots 
+# ComparisonCanvas objects used to display four plots
 # wanted to show four ComparisonFigure objects (with four plots each) but seems that
 # each FigureCanvas can only have one Figure object
 class ComparisonCanvas(BaseCanvas):
     def __init__(self, windowTitle):
         BaseCanvas.__init__(self, windowTitle, width=4, height=7)
         self.setFixedSize(450, 800)
-        
+
 
 # ResultsCanvas objects used to display plots for all 24 devices/channels
 # Class has one instance each of:
 #    Figure (which can hold multiple subplots)
-#    FigureCanvas (which holds the figure) 
+#    FigureCanvas (which holds the figure)
 class ResultsCanvas(BaseCanvas):
     def __init__(self, windowTitle):
         BaseCanvas.__init__(self, windowTitle)
         self.setFixedSize(1470, 1000)
-        #self.setScreenLocation()
-
 
 
 # Client code
@@ -1237,8 +1100,6 @@ def main():
 
     # Execute the program's main loop
     sys.exit(convertacc.exec_())
-
-    #results._printPDF()
 
 
 if __name__ == '__main__':
