@@ -411,8 +411,7 @@ class Conversion:
             
     def convertCountToG(self):
         """
-        add new column to df to hold acceleration in g (converted from 
-        raw counts) per formula in Autopro report
+        add new column to df holding acceleration in g (converted from raw counts)
         """
         self.df['g'] = self.df['count'] * (2.5/8388608) * (1/self.sensitivity)
         self.logHeadTail()

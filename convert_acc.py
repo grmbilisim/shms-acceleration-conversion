@@ -452,11 +452,10 @@ class Conversion:
 
     def convertCountToG(self):
         """
-        add new column to df to hold acceleration in g (converted from 
-        raw counts) per formula in Autopro report
+        add new column to df holding acceleration in g (converted from raw counts)
         """
         self.df['g'] = self.df['count'] * (2.5/8388608) * (1/self.sensitivity)
-        self.logHeadTail()
+        #self.logHeadTail()
 
 
     def addZeroPad(self, padLength=500, location='both'):
@@ -615,7 +614,7 @@ class Conversion:
         else:
             peakInfo = maxPair
 
-        peakInfo.append(round(peakInfo[1], 3))
+        peakInfo.append(round(peakInfo[1], 4))
 
         #peakVal = max(abs(minVal), abs(maxVal))
 
@@ -812,18 +811,18 @@ class PrimaryUi(QMainWindow):
 
     def createRadioButtons(self):
         self.approachGroup = QButtonGroup(self.centralWidget)
-        self.timeAutopro = QRadioButton('Time-domain per Autopro report')
-        self.timeAutopro.setChecked(True)
+        self.timePlain = QRadioButton('Time-domain conversion')
+        self.timePlain.setChecked(True)
         self.timeBaseline = QRadioButton('Time-domain with baseline correction')
         self.freqCorrection = QRadioButton('Frequency-domain with correction filter')
         self.freqPlain = QRadioButton('Frequency-domain without correction filter')
 
-        self.approachGroup.addButton(self.timeAutopro)
+        self.approachGroup.addButton(self.timePlain)
         self.approachGroup.addButton(self.timeBaseline)
         self.approachGroup.addButton(self.freqCorrection)
         self.approachGroup.addButton(self.freqPlain)
 
-        self.generalLayout.addWidget(self.timeAutopro)
+        self.generalLayout.addWidget(self.timePlain)
         self.generalLayout.addWidget(self.timeBaseline)
         self.generalLayout.addWidget(self.freqCorrection)
         self.generalLayout.addWidget(self.freqPlain)
@@ -861,11 +860,11 @@ class PrimaryUi(QMainWindow):
     #*************************
     def updateStatsTable(self, conversionObject):
         """update row of stats table with max values at each of the (currently four) parameters"""
-        accRawPeakVal = conversionObject.accRawStats[1]
-        accOffsetPeakVal = conversionObject.accOffsetStats[1]
-        accBandpassedPeakVal = conversionObject.accBandpassedStats[1]
-        velPeakVal = conversionObject.velStats[1]
-        dispPeakVal = conversionObject.dispStats[1]
+        accRawPeakVal = conversionObject.accRawStats[2]
+        accOffsetPeakVal = conversionObject.accOffsetStats[2]
+        accBandpassedPeakVal = conversionObject.accBandpassedStats[2]
+        velPeakVal = conversionObject.velStats[2]
+        dispPeakVal = conversionObject.dispStats[2]
 
         self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[0], accOffsetPeakVal)
         self.statsTable.updateStatsDf(conversionObject.sensorCodeWithChannel, self.statsColumnNames[1], accBandpassedPeakVal)
@@ -1079,7 +1078,7 @@ class PrimaryUi(QMainWindow):
         """Create single submit button"""
         self.submitBtn = QPushButton(self)
         self.submitBtn.setText("Submit")
-        # using only Autopro approach now - add others later
+        # using only plain time-domain approach now - add others later
         self.submitBtn.clicked.connect(self.processUserInput)
         self.generalLayout.addWidget(self.submitBtn)
 
