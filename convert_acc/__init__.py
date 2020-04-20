@@ -98,9 +98,10 @@ SENSOR_CODES_WITH_CHANNELS = [
 
 def getSensorCodeInfo(inputFile):
     """
-    Return strings holding sensor code only (ex. 'B4F') and sensor code with channel (ex. 'B4Fx')
+    Return strings holding sensor code only and sensor code with channel
     In far field cases, these will be identical ('FFW', 'FFN', 'FFZ')
     inputFile: string holding either filename or path of .txt or .m file
+    return: tuple of strings holding sensor code info ex. ('B4F', 'B4Fx')
     """
     # get string holding file extension - either 'txt' or 'm' (without dot)
     inputFileExt = inputFile.split('.')[-1]
@@ -172,7 +173,7 @@ def getTimeText(inputFile):
 
 def sortFilesBySensorCode(inputFileList):
     """
-    Sort given list of files by sensor code.
+    Sort given list of files alphabetically by sensor code.
     inputFileList: list of strings holding filenames (or paths?) of miniseed or text files.
     return: list of files sorted by sensor code (according to order of SENSOR_CODES).
     """
@@ -186,7 +187,7 @@ def sortFilesBySensorCode(inputFileList):
 
 def sortFiles(inputFileList):
     """
-    Sort given list of files according to Safe report.
+    Sort given list of files according to order in third-party report.
     inputFileList: list of strings holding filenames or full paths of miniseed or text files.
     return: sorted list of input text files
     """
@@ -224,31 +225,27 @@ class ProcessedFromTxtFile:
         """set header list for object from dataframe columns"""
         self.headerList = [item for item in list(self.df.columns.values)]
 
-    def getFirstTimestamp(self):
+    def getTimestamp(self):
         """
-        get earliest pandas timestamp from among column headers
-        (which will contain either one or two timestamps)
+        get pandas timestamp from among column headers
         return: pandas Timestamp object
         """
-        # create empty timestamp list
-        tsList = []
+        timestamp = None
         for item in self.headerList:
             try:
-                ts = pd.Timestamp(item)
-                tsList.append(ts)
+                timestamp = pd.Timestamp(item)
             except:
                 pass
-        earliestTs = tsList[0]
-        if len(tsList) == 1:
-            return earliestTs
-        elif len(tsList) == 2:
-            if tsList[1] < tsList[0]:
-                earliestTs = tsList[1]
-            return earliestTs
+        if timestamp:
+            return timestamp
+        else:
+            raise ValueError('Timestamp header not found in input text file.')
 
     def getCountColumnHeader(self):
         """
-        get column header that contains count values
+        get column header that contains count values 
+        necessary values are not always under 'Counts' header
+        order of headers varies
         return: string holding name of column holding count values
         """
         countHeader = None
@@ -261,9 +258,9 @@ class ProcessedFromTxtFile:
                 logging.debug(countHeader)
                 return countHeader
 
-    def getDfWithTimestampedCounts(self):
-        """arrange self.df to contain only timestamp and count columns"""
-        startTime = self.getFirstTimestamp()
+    def getTimestampSeries(self):
+        """get pandas series holding all necessary timestamps for given hour"""
+        startTime = self.getTimestamp()
         # time delta between entries: 0.01 s
         timeDelta = pd.Timedelta('0 days 00:00:00.01000')
         # time delta of entire file - 1 hour minus  0.01 s
@@ -271,9 +268,13 @@ class ProcessedFromTxtFile:
         endTime = startTime + fileTimeDelta
         # create timestamp series
         timestampSeries = pd.Series(pd.date_range(start=startTime, end=endTime, freq=timeDelta))
+        return timestampSeries
+
+    def getDfWithTimestampedCounts(self):
+        """arrange self.df to contain only timestamp and count columns"""
         # add new columns to dataframe
         self.df['count'] = self.df[self.getCountColumnHeader()]
-        self.df['timestamp'] = timestampSeries
+        self.df['timestamp'] = self.getTimestampSeries()
         requiredColumns = ['timestamp', 'count']
         extraneousColumns = [header for header in self.headerList if header not in requiredColumns]
         for c in extraneousColumns:
@@ -285,6 +286,13 @@ class ProcessedFromTxtFile:
 # count to acceleration, velocity, and displacement
 class Conversion:
     def __init__(self, df, sensorCode, sensorCodeWithChannel, eventTimestamp):
+        """
+        Initializer for Conversion class
+        df: pandas df of ProcessedFromTxtFile object
+        sensorCode: string holding sensor code ex. 'B4F'
+        sensorCodeWithChannel: string holding sensor code and axis ex. 'B4Fx'
+        eventTimestamp: string holding event timestamp ex.'2020-01-13T163712'
+        """
         self.df = df
         self.sensorCode = sensorCode
         self.sensorCodeWithChannel = sensorCodeWithChannel
@@ -356,11 +364,7 @@ class Conversion:
         print(self.df.tail())
 
     def truncateDf(self):
-        """
-        truncate self.df based on timestamp for known time event
-        eventTimestamp: string holding timestamp (same as event dir name)
-        in format: '2020-01-13T163712'
-        """
+        """truncate self.df based on timestamp for known time event"""
         # convert string timestamp to pandas Timestamp instance
         eventTimestamp = pd.Timestamp(self.eventTimestamp)
         # convert timestamp from local Turkish time to UTC
@@ -368,10 +372,20 @@ class Conversion:
         startTime = eventTimestamp - pd.Timedelta('1 minute')
         endTime = startTime + pd.Timedelta('400 seconds')
 
+        '''
+        print('start time: {0}, end time: {1}'.format(startTime, endTime))
+        print('type of start time: {0}'.format(type(startTime)))
+        print('df dtypes: {0}'.format(self.df.dtypes))
+        print(self.df[self.df['timestamp'] == startTime])
+        print(self.df[self.df['timestamp'] == endTime])
+        '''
         startIndex = self.df.index[self.df['timestamp'] == startTime][0]
         endIndex = self.df.index[self.df['timestamp'] == endTime][0]
 
-        # would prefer not to assign truncated df to self.df as now dealing with a copy of a slice
+        # print('start index: {0}, end index: {1}'.format(startIndex, endIndex))
+
+        # would prefer not to assign truncated df to self.df as now dealing 
+        # with a copy of a slice
         self.df = self.df.truncate(startIndex, endIndex, copy=False)
 
     def setSensitivity(self):
