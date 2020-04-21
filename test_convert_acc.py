@@ -55,6 +55,7 @@ def test_sortFiles(unordered_file_list_all, ordered_file_list_all):
 # ----------unit tests for methods------------
 
 # unit tests for ProcessedFromTxtFile methods
+# using ProcessedFromTxtFile object from 'test_data/20190926100000.ALZ.001.B4Fx.txt'
 
 def test_setHeaderList(pObject):
 	assert pObject.headerList == ['TIMESERIES AT_ALZ__B4F_D',' 360000 samples', ' 100 sps', ' 2019-09-26T10:00:00.010000', ' SLIST',
@@ -79,14 +80,26 @@ def test_getTimestampSeries(pObject):
 
 
 # unit tests for Conversion methods
-'''
-def test_truncateDfFirst(cObject):
-	assert cObject.df.iloc[0]['timestamp'] == pd.Timestamp('2019-09-26 10:58:30')
+# using Conversion object with B4Fx for event starting at 2019-09-26T135930 local time
 
-def test_truncateDfLast(cObject):
+def test_truncateDfFirstRow(cObject):
+	netIgnoredSamples = cObject.ignoredSamples - cObject.zeroPadLength
+	ignoredSeconds = netIgnoredSamples / 100
+	ignoredTimedelta = pd.Timedelta('{0} seconds'.format(ignoredSeconds))
+	assert cObject.df.iloc[0]['timestamp'] == pd.Timestamp('2019-09-26 10:58:30') + ignoredTimedelta
+
+
+def test_truncateDfLastLow(cObject):
 	assert cObject.df.iloc[-1]['timestamp'] == pd.Timestamp('2019-09-26 11:05:10')
-	#assert len(cObject.df) == 401
-'''
+
+
+def test_setSensitivity(cObject):
+	assert cObject.sensitivity == 1.25
+
+
+def test_convertCountToG(cObject):
+	assert cObject.df['g'][0] == pass
+
 
 
 # -------------pytest examples------------------

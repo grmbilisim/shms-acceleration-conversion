@@ -319,6 +319,7 @@ class Conversion:
         # time between samples in seconds
         self.dt = 1 / float(self.fs)
 
+        self.zeroPadLength = 500
         self.ignoredSamples = 6000
 
         self.resultsSubplotDict = dict(zip(SENSOR_CODES_WITH_CHANNELS, [x for x in range(1, 25)]))
@@ -328,7 +329,8 @@ class Conversion:
 
         self.truncateDf()
         self.setSensitivity()
-        self.convertCountToG()
+        # self.convertCountToG()
+        self.df['g'] = self.df['count'].apply(lambda x: self.convertCountToG(x))
         self.addZeroPad()
         self.convertGToOffsetG()
         self.convertGToMetric()
@@ -371,21 +373,13 @@ class Conversion:
         eventTimestamp = eventTimestamp - pd.Timedelta('3 hours')
         startTime = eventTimestamp - pd.Timedelta('1 minute')
         endTime = startTime + pd.Timedelta('400 seconds')
-
-        '''
-        print('start time: {0}, end time: {1}'.format(startTime, endTime))
-        print('type of start time: {0}'.format(type(startTime)))
-        print('df dtypes: {0}'.format(self.df.dtypes))
-        print(self.df[self.df['timestamp'] == startTime])
-        print(self.df[self.df['timestamp'] == endTime])
-        '''
+        
         startIndex = self.df.index[self.df['timestamp'] == startTime][0]
         endIndex = self.df.index[self.df['timestamp'] == endTime][0]
 
-        # print('start index: {0}, end index: {1}'.format(startIndex, endIndex))
-
         # would prefer not to assign truncated df to self.df as now dealing 
         # with a copy of a slice
+
         self.df = self.df.truncate(startIndex, endIndex, copy=False)
 
     def setSensitivity(self):
@@ -405,19 +399,28 @@ class Conversion:
         else:
             raise ValueError('Non-null value must be assigned to sensitivity.')
 
+    '''
     def convertCountToG(self):
         """
         add new column to df holding acceleration in g (converted from raw counts)
         """
         self.df['g'] = self.df['count'] * (2.5 / 8388608) * (1 / self.sensitivity)
+    '''
 
-    def addZeroPad(self, padLength=500, location='both'):
+    def convertCountToG(self, count):
+        """
+        add new column to df holding acceleration in g (converted from raw counts)
+        """
+        g = count * (2.5 / 8388608) * (1 / self.sensitivity)
+        return g
+
+    def addZeroPad(self, location='both'):
         """
         add zeropad of given length at given location to necessary columns: timestamp and g
         """
-        zeros = np.zeros(shape=(padLength))
+        zeros = np.zeros(shape=(self.zeroPadLength))
         zeroPad = pd.Series(zeros)
-        nullList = [None] * padLength
+        nullList = [None] * self.zeroPadLength
         nullSeries = pd.Series(nullList)
         if location == 'both':
             paddedG = pd.concat([zeroPad, self.df['g'], zeroPad])
