@@ -4,19 +4,10 @@ import pandas as pd
 import numpy as np
 
 
-# not using now - wanted to access this from parametrize decorator
-@pytest.fixture(scope='module')
-def files_sensor_codes():
-	return {'/home/grm/acc-data-conversion/working/2019-09-26T135930/20190926110000.ALZ.003.S39z.txt': ('S39', 'S39z'),
-          'ALZ.003.S39z.txt': ('S39', 'S39z'), 
-          '/home/grm/AllianzSHMS/working/test-mseed-files_20190926/20190926100000.ALZ.001.B4Fx.m': ('B4F', 'B4Fx'),
-            'ALZ.001.B4Fx.m': ('B4F', 'B4Fx')}
-
-
 # fixtures for testing functions
 
 @pytest.fixture(scope='module')
-def unordered_file_list_short():
+def unorderedFileListShort():
 	return {0: 
 			['20190926100000.ALZ.003.B4Fz.m',
 			 '20190926100000.ALZ.001.B4Fx.m',
@@ -24,9 +15,8 @@ def unordered_file_list_short():
 			]}
 
 
-
 @pytest.fixture(scope='module')
-def ordered_file_list_short():
+def orderedFileListShort():
 	return {0:
 			['20190926100000.ALZ.001.B4Fx.m',
 			 '20190926100000.ALZ.002.B4Fy.m',
@@ -35,7 +25,7 @@ def ordered_file_list_short():
 
 
 @pytest.fixture(scope='module')
-def unordered_file_list_all():
+def unorderedFileListAll():
 	return {0:
 			['20190926100000.ALZ.003.B4Fz.m',
 			 '20190926100000.ALZ.002.B4Fy.m',
@@ -89,7 +79,7 @@ def unordered_file_list_all():
 
 
 @pytest.fixture(scope='module')
-def ordered_file_list_all():
+def orderedFileListAll():
 	return {0:
 			['20190926100000.ALZ.001.N39x.m',
 			 '20190926100000.ALZ.002.N39y.m',

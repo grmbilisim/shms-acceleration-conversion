@@ -298,7 +298,7 @@ class Conversion:
         self.sensorCodeWithChannel = sensorCodeWithChannel
         self.floor = getFloor(self.sensorCode)
         self.eventTimestamp = eventTimestamp
-        self.sensitivity = None
+        self.sensitivity = self.setSensitivity(self.sensorCodeWithChannel)
         # self.accRawStats = None
         self.accOffsetStats = None
         self.accBandpassedStats = None
@@ -328,22 +328,23 @@ class Conversion:
         self.comparisonSubplotDict = {'39': 1, '24': 2, '12': 3, '4': 4}
 
         self.truncateDf()
-        self.setSensitivity()
-        # self.convertCountToG()
         self.df['g'] = self.df['count'].apply(lambda x: self.convertCountToG(x))
         self.addZeroPad()
-        self.convertGToOffsetG()
-        self.convertGToMetric()
+        # add 'offset_g' column by detrending 'g'
+        self.df['offset_g'] = detrend(self.df['g'], type='constant')
+        self.df['acc_ms2'] = self.df['offset_g'].apply(lambda x: self.convertGToMetric(x))
+
         self.butterBandpassFilter('offset_g', 'bandpassed_g')
         self.butterBandpassFilter('acc_ms2', 'bandpassed_ms2')
         self.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
         self.clipDf()
-        self.detrendData('velocity_ms', 'detrended_velocity_ms')
-        self.convertMToCm('detrended_velocity_ms', 'detrended_velocity_cms')
+        self.df['detrended_velocity_ms'] = detrend(self.df['velocity_ms'], type='constant')
+        self.df['detrended_velocity_cms'] = self.df['detrended_velocity_ms'].apply(lambda x: self.convertMToCm(x))
+        # self.convertMToCm('detrended_velocity_ms', 'detrended_velocity_cms')
         self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
-        self.detrendData('displacement_m', 'detrended_displacement_m')
+        self.df['detrended_displacement_m'] = detrend(self.df['displacement_m'], type='constant')
         self.butterHighpassFilter('detrended_displacement_m', 'highpassed_displacement_m')
-        self.convertMToCm('highpassed_displacement_m', 'highpassed_displacement_cm')
+        self.df['highpassed_displacement_cm'] = self.df['highpassed_displacement_m'].apply(lambda x: self.convertMToCm(x))
 
         # self.accRawStats = self.getStats('g')
         self.accOffsetStats = self.getStats('offset_g')
@@ -382,41 +383,31 @@ class Conversion:
 
         self.df = self.df.truncate(startIndex, endIndex, copy=False)
 
-    def setSensitivity(self):
+    def setSensitivity(self, sensorCodeWithChannel):
         """
-        return float holding sensitivity in V/g based on sensorCode
+        return float holding sensitivity in V/g based on given sensorCode
+        sensorCodeWithChannel: string of form 'B4Fx'
         """
-        groundFloorSensorCodes = [c for c in SENSOR_CODES if c.endswith('F')]
-        upperFloorSensorCodes = [c for c in SENSOR_CODES if not c.endswith('F')]
-        for code in groundFloorSensorCodes:
-            if self.sensorCode.startswith(code):
-                self.sensitivity = 1.25
-        for code in upperFloorSensorCodes:
-            if self.sensorCode.startswith(code):
-                self.sensitivity = 0.625
-        if self.sensitivity:
-            return self.sensitivity
+        groundFloorSensorCodes = [c for c in SENSOR_CODES_WITH_CHANNELS if 'F' in c]
+        upperFloorSensorCodes = [c for c in SENSOR_CODES_WITH_CHANNELS if 'F' not in c]
+        if sensorCodeWithChannel in groundFloorSensorCodes:
+            return 1.25
+        elif sensorCodeWithChannel in upperFloorSensorCodes:
+            return 0.625
         else:
-            raise ValueError('Non-null value must be assigned to sensitivity.')
-
-    '''
-    def convertCountToG(self):
-        """
-        add new column to df holding acceleration in g (converted from raw counts)
-        """
-        self.df['g'] = self.df['count'] * (2.5 / 8388608) * (1 / self.sensitivity)
-    '''
+            raise ValueError('Sensitivity must contain non-null value.')
 
     def convertCountToG(self, count):
         """
-        add new column to df holding acceleration in g (converted from raw counts)
+        convert acceleration as raw count to acceleration as g
+        count: int holding acceleration data collected by sensor
         """
         g = count * (2.5 / 8388608) * (1 / self.sensitivity)
         return g
 
     def addZeroPad(self, location='both'):
         """
-        add zeropad of given length at given location to necessary columns: timestamp and g
+        add zeropad at given location to necessary columns: timestamp and g
         """
         zeros = np.zeros(shape=(self.zeroPadLength))
         zeroPad = pd.Series(zeros)
@@ -433,27 +424,29 @@ class Conversion:
         paddedData = {'timestamp': paddedTimestamp, 'g': paddedG}
         self.df = pd.DataFrame(paddedData, columns=['timestamp', 'g'])
 
-    def convertGToOffsetG(self):
-        """add new column to df where mean of g has been removed"""
-        self.df['offset_g'] = detrend(self.df['g'], type='constant')
-
-    def convertGToMetric(self):
-        """add new column to df showing acceleration in m/s^2"""
-        self.df['acc_ms2'] = self.df['offset_g'] * 9.80665
-        self.logHeadTail()
-
-    def butterBandpass(self):
+    def convertGToMetric(self, g):
         """
-        return bandpass filter coefficients...
+        return acceleration in m/s^2 from acceleration in g
+        g: float holding acceleration in g
+        """
+        return g * 9.80665
+
+    def butterPass(self, filterType):
+        """
+        return bandpass or highpass filter coefficients...
         from https://scipy-cookbook.readthedocs.io/items/ButterworthBandpass.html
+        filterType: string holding 'band' or 'high'
         return:
-        b: numerator of filter
-        a: denominator of filter
+            b: numerator of filter
+            a: denominator of filter
         """
         nyq = 0.5 * self.fs
         low = self.lowcut / nyq
         high = self.highcut / nyq
-        b, a = butter(self.order, [low, high], btype='band')
+        if filterType == 'band':
+            b, a = butter(self.order, [low, high], btype='band')
+        elif filterType == 'high':
+            b, a = butter(self.order, low, btype='high')
         logging.info('butterworth coefficients - b: {0}, a: {1}'.format(b, a))
         return b, a
 
@@ -463,7 +456,7 @@ class Conversion:
         (apply bandpass filter to data using filter coefficients b and a)
         from https://scipy-cookbook.readthedocs.io/items/ButterworthBandpass.html
         """
-        b, a = self.butterBandpass()
+        b, a = self.butterPass('band')
         self.df[outputColumn] = lfilter(b, a, self.df[inputColumn])
 
     def integrateDfColumn(self, inputColumn, outputColumn):
@@ -482,36 +475,19 @@ class Conversion:
         self.df = self.df.truncate(self.ignoredSamples, 40500, copy=False)
         self.df.reset_index(drop=True, inplace=True)
 
-    def detrendData(self, inputColumn, outputColumn):
-        """
-        detrend data by removing mean
-        (will get called after data is clipped so as not to include extreme values
-        that would skew the mean)
-        """
-        self.df[outputColumn] = detrend(self.df[inputColumn], type='constant')
-
-    def butterHighpass(self):
-        """
-        return coefficients for highpass filter
-        modeled after Butterworth bandpass code in scipy cookbook
-        """
-        nyq = 0.5 * self.fs
-        cutoff = self.lowcut / nyq
-        b, a = butter(self.order, cutoff, btype='high')
-        return b, a
-
     def butterHighpassFilter(self, inputColumn, outputColumn):
         """
         modeled after Butterworth bandpass code in scipy cookbook
         """
-        b, a = self.butterHighpass()
+        b, a = self.butterPass('high')
         self.df[outputColumn] = lfilter(b, a, self.df[inputColumn])
 
-    def convertMToCm(self, inputColumn, outputColumn):
+    def convertMToCm(self, m):
         """
         convert values in meters to values in centimeters
+        m: int or float holding distance in m
         """
-        self.df[outputColumn] = self.df[inputColumn] * 100
+        return m * 100
 
     # may not be used
     def setTimestampAsIndex(self):

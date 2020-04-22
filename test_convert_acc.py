@@ -4,52 +4,57 @@ import pytest
 
 import pandas as pd
 
+# dictionaries holding test inputs as keys and expected values as values
 # ----------would prefer to return these dictionaries from fixtures but not yet sure how to access them in parametrize decorators-----------
 # may not be possible: https://medium.com/opsops/deepdive-into-pytest-parametrization-cb21665c05b9
 
-files_sensor_codes = {'/home/grm/acc-data-conversion/working/2019-09-26T135930/20190926110000.ALZ.003.S39z.txt': ('S39', 'S39z'),
+fileSensorCode = {'/home/grm/acc-data-conversion/working/2019-09-26T135930/20190926110000.ALZ.003.S39z.txt': ('S39', 'S39z'),
           'ALZ.003.S39z.txt': ('S39', 'S39z'), 
           '/home/grm/AllianzSHMS/working/test-mseed-files_20190926/20190926100000.ALZ.001.B4Fx.m': ('B4F', 'B4Fx'),
             'ALZ.001.B4Fx.m': ('B4F', 'B4Fx')}
 
-sensor_codes_floors = {'B4Fx': '4', 'N39x': '39'}
+sensorCodeFloor = {'B4Fx': '4', 'N39x': '39'}
 
-floors_axes = {'B4Fx': 'X', 'S24z': 'Z', 'N12y': 'Y'}
+floorAxis = {'B4Fx': 'X', 'S24z': 'Z', 'N12y': 'Y'}
 
-files_timestamps = {'/home/grm/acc-data-conversion/working/2019-09-26T135930/20190926110000.ALZ.003.S39z.txt': ('11', '20190926110000'),
+fileTimestamp = {'/home/grm/acc-data-conversion/working/2019-09-26T135930/20190926110000.ALZ.003.S39z.txt': ('11', '20190926110000'),
 					'/home/grm/AllianzSHMS/working/test-mseed-files_20190926/20190926100000.ALZ.001.B4Fx.m': ('10', '20190926100000')}
+
+#countG = {-39527: -0.009423971176147461, 8250: 0.0019669532775878906}
+
+#sensorCodeWithChannelSensitivity = {'B4Fx': 1.25, 'FFN': 1.25, 'N39z': 0.625, 'S12y': 0.625}
 
 # --------------------------------------------------------------
 
 
 # ------------------unit tests for functions------------------
 
-@pytest.mark.parametrize("test_input, expected", [(k, v) for k, v in files_sensor_codes.items()])
-def test_getSensorCodeInfo(test_input, expected):
-	assert convert_acc.getSensorCodeInfo(test_input) == expected
+@pytest.mark.parametrize("testInput, expected", [(k, v) for k, v in fileSensorCode.items()])
+def test_getSensorCodeInfo(testInput, expected):
+	assert convert_acc.getSensorCodeInfo(testInput) == expected
 
 
-@pytest.mark.parametrize("test_input, expected", [(k, v) for k, v in sensor_codes_floors.items()])
-def test_getFloor(test_input, expected):
-	assert convert_acc.getFloor(test_input) == expected
+@pytest.mark.parametrize("testInput, expected", [(k, v) for k, v in sensorCodeFloor.items()])
+def test_getFloor(testInput, expected):
+	assert convert_acc.getFloor(testInput) == expected
 
 
-@pytest.mark.parametrize("test_input, expected", [(k, v) for k, v in floors_axes.items()])
-def test_getAxis(test_input, expected):
-	assert convert_acc.getAxis(test_input) == expected
+@pytest.mark.parametrize("testInput, expected", [(k, v) for k, v in floorAxis.items()])
+def test_getAxis(testInput, expected):
+	assert convert_acc.getAxis(testInput) == expected
 
 
-@pytest.mark.parametrize("test_input, expected", [(k, v) for k, v in files_timestamps.items()])
-def test_getTimeText(test_input, expected):
-	assert convert_acc.getTimeText(test_input) == expected
+@pytest.mark.parametrize("testInput, expected", [(k, v) for k, v in fileTimestamp.items()])
+def test_getTimeText(testInput, expected):
+	assert convert_acc.getTimeText(testInput) == expected
 
 
-def test_sortFilesBySensorCode(unordered_file_list_short, ordered_file_list_short):
-	assert convert_acc.sortFilesBySensorCode(unordered_file_list_short[0]) == ordered_file_list_short[0]
+def test_sortFilesBySensorCode(unorderedFileListShort, orderedFileListShort):
+	assert convert_acc.sortFilesBySensorCode(unorderedFileListShort[0]) == orderedFileListShort[0]
 
 
-def test_sortFiles(unordered_file_list_all, ordered_file_list_all):
-	assert convert_acc.sortFiles(unordered_file_list_all[0]) == ordered_file_list_all[0]
+def test_sortFiles(unorderedFileListAll, orderedFileListAll):
+	assert convert_acc.sortFiles(unorderedFileListAll[0]) == orderedFileListAll[0]
 
 
 # ----------unit tests for methods------------
@@ -93,14 +98,32 @@ def test_truncateDfLastLow(cObject):
 	assert cObject.df.iloc[-1]['timestamp'] == pd.Timestamp('2019-09-26 11:05:10')
 
 
-def test_setSensitivity(cObject):
-	assert cObject.sensitivity == 1.25
+# cannot do it this way - need an instance or mock instance of the class
+'''
+@pytest.mark.parametrize("testInput, expected", [(k, v) for k, v in sensorCodeWithChannelSensitivity.items()])
+def test_setSensitivity(testInput, expected):
+	assert convert_acc.Conversion.setSensitivity(testInput) == expected
 
+
+@pytest.mark.parametrize("testInput, expected", [(k, v) for k, v in countG.items()])
+def test_convertCountToG(testInput, expected):
+	assert convert_acc.Conversion.convertCountToG(testInput) == expected
+'''
 
 def test_convertCountToG(cObject):
-	assert cObject.df['g'][0] == pass
+	assert cObject.convertCountToG(-39527) == -0.009423971176147461
+	assert cObject.convertCountToG(8250) == 0.0019669532775878906
 
 
+def test_setSensitivity(cObject):
+	assert cObject.setSensitivity('B4Fx') == 1.25
+	assert cObject.setSensitivity('FFN') == 1.25
+	assert cObject.setSensitivity('N39y') == 0.625
+	assert cObject.setSensitivity('S12z') == 0.625
+
+
+def test_convertGToMetric(cObject):
+	assert cObject.convertGToMetric(0.07916) == 0.7762944139999999
 
 # -------------pytest examples------------------
 '''
@@ -123,9 +146,9 @@ def test_getSensorCodeInfo():
 
 # -----------parametrize example with one failure
 
-@pytest.mark.parametrize("test_input,expected", [("3+5", 8), ("2+4", 6), ("6*9", 42)])
-def test_eval(test_input, expected):
-    assert eval(test_input) == expected
+@pytest.mark.parametrize("testInput,expected", [("3+5", 8), ("2+4", 6), ("6*9", 42)])
+def test_eval(testInput, expected):
+    assert eval(testInput) == expected
 
 
 # -----------fixture and parametrize together
