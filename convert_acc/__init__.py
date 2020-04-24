@@ -293,7 +293,7 @@ class Conversion:
         sensorCodeWithChannel: string holding sensor code and axis ex. 'B4Fx'
         eventTimestamp: string holding event timestamp ex.'2020-01-13T163712'
         """
-        self.df = df
+        self.inputDf = df
         self.sensorCode = sensorCode
         self.sensorCodeWithChannel = sensorCodeWithChannel
         self.floor = getFloor(self.sensorCode)
@@ -327,9 +327,13 @@ class Conversion:
         # key '4' refers to floor 'B4'
         self.comparisonSubplotDict = {'39': 1, '24': 2, '12': 3, '4': 4}
 
-        self.truncateDf()
+        # manipulate input dataframe
+
+        self.truncateStartIndex, self.truncateEndIndex = self.getTruncateIndexes()
+        # would prefer not to assign truncated df to self.df as now dealing with copy of slice
+        self.df = self.inputDf.truncate(self.truncateStartIndex, self.truncateEndIndex, copy=False)
         self.df['g'] = self.df['count'].apply(lambda x: self.convertCountToG(x))
-        self.addZeroPad()
+        self.df = self.getZeroPaddedDf(self.df, ['timestamp', 'g'])
         # add 'offset_g' column by detrending 'g'
         self.df['offset_g'] = detrend(self.df['g'], type='constant')
         self.df['acc_ms2'] = self.df['offset_g'].apply(lambda x: self.convertGToMetric(x))
@@ -366,22 +370,17 @@ class Conversion:
         print('tail')
         print(self.df.tail())
 
-    def truncateDf(self):
-        """truncate self.df based on timestamp for known time event"""
+    def getTruncateIndexes(self):
+        """return tuple holding start and end indexes to be used to truncate dataframe"""
         # convert string timestamp to pandas Timestamp instance
         eventTimestamp = pd.Timestamp(self.eventTimestamp)
         # convert timestamp from local Turkish time to UTC
         eventTimestamp = eventTimestamp - pd.Timedelta('3 hours')
         startTime = eventTimestamp - pd.Timedelta('1 minute')
         endTime = startTime + pd.Timedelta('400 seconds')
-        
-        startIndex = self.df.index[self.df['timestamp'] == startTime][0]
-        endIndex = self.df.index[self.df['timestamp'] == endTime][0]
-
-        # would prefer not to assign truncated df to self.df as now dealing 
-        # with a copy of a slice
-
-        self.df = self.df.truncate(startIndex, endIndex, copy=False)
+        startIndex = self.inputDf.index[self.inputDf['timestamp'] == startTime][0]
+        endIndex = self.inputDf.index[self.inputDf['timestamp'] == endTime][0]
+        return startIndex, endIndex
 
     def setSensitivity(self, sensorCodeWithChannel):
         """
@@ -405,24 +404,29 @@ class Conversion:
         g = count * (2.5 / 8388608) * (1 / self.sensitivity)
         return g
 
-    def addZeroPad(self, location='both'):
+    def getZeroPaddedDf(self, df, columns):
         """
-        add zeropad at given location to necessary columns: timestamp and g
+        return pandas dataframe with zeropad added to both head and tail of data in given df
+        (length of zero pad determined by instance variable zeroPadLength) 
+        df: pandas dataframe used as input
+        columns: list of strings holding names of columns to be padded and
+            returned in new dataframe ['timestamp', 'g']
+        return: pandas dataframe with only padded columns
         """
         zeros = np.zeros(shape=(self.zeroPadLength))
         zeroPad = pd.Series(zeros)
         nullList = [None] * self.zeroPadLength
         nullSeries = pd.Series(nullList)
-        if location == 'both':
-            paddedG = pd.concat([zeroPad, self.df['g'], zeroPad])
-            paddedTimestamp = pd.concat([nullSeries, self.df['timestamp'], nullSeries])
-        elif location == 'tail':
-            paddedG = pd.concat([self.df['g'], zeroPad])
-            paddedTimestamp = pd.concat([self.df['timestamp'], nullSeries])
-        paddedTimestamp.reset_index(drop=True, inplace=True)
-        paddedG.reset_index(drop=True, inplace=True)
-        paddedData = {'timestamp': paddedTimestamp, 'g': paddedG}
-        self.df = pd.DataFrame(paddedData, columns=['timestamp', 'g'])
+        paddedColumns = []
+        for column in columns:
+            if column == 'timestamp':
+                paddedColumn = pd.concat([nullSeries, df[column], nullSeries])
+            else:
+                paddedColumn = pd.concat([zeroPad, df[column], zeroPad])
+            paddedColumn.reset_index(drop=True, inplace=True)
+            paddedColumns.append(paddedColumn)
+        paddedData = dict(zip(columns, paddedColumns))
+        return pd.DataFrame(paddedData, columns=columns)
 
     def convertGToMetric(self, g):
         """

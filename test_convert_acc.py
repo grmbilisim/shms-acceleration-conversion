@@ -3,6 +3,7 @@ import unittest
 import pytest
 
 import pandas as pd
+import numpy as np
 
 # dictionaries holding test inputs as keys and expected values as values
 # ----------would prefer to return these dictionaries from fixtures but not yet sure how to access them in parametrize decorators-----------
@@ -86,16 +87,7 @@ def test_getTimestampSeries(pObject):
 
 # unit tests for Conversion methods
 # using Conversion object with B4Fx for event starting at 2019-09-26T135930 local time
-
-def test_truncateDfFirstRow(cObject):
-	netIgnoredSamples = cObject.ignoredSamples - cObject.zeroPadLength
-	ignoredSeconds = netIgnoredSamples / 100
-	ignoredTimedelta = pd.Timedelta('{0} seconds'.format(ignoredSeconds))
-	assert cObject.df.iloc[0]['timestamp'] == pd.Timestamp('2019-09-26 10:58:30') + ignoredTimedelta
-
-
-def test_truncateDfLastLow(cObject):
-	assert cObject.df.iloc[-1]['timestamp'] == pd.Timestamp('2019-09-26 11:05:10')
+# may have been better to mock the dataframe but keeping test data for now
 
 
 # cannot do it this way - need an instance or mock instance of the class
@@ -110,9 +102,23 @@ def test_convertCountToG(testInput, expected):
 	assert convert_acc.Conversion.convertCountToG(testInput) == expected
 '''
 
-def test_convertCountToG(cObject):
-	assert cObject.convertCountToG(-39527) == -0.009423971176147461
-	assert cObject.convertCountToG(8250) == 0.0019669532775878906
+
+def test_getTruncateIndexes(cObject):
+	"""assert that indexes used for truncating dataframe are correct"""
+	assert cObject.getTruncateIndexes() == (350999, 390999)
+
+
+def test_truncateDfFirstRow(cObject):
+	"""assert that first row of timestamp column of dataframe is correct"""
+	netIgnoredSamples = cObject.ignoredSamples - cObject.zeroPadLength
+	ignoredSeconds = netIgnoredSamples / 100
+	ignoredTimedelta = pd.Timedelta('{0} seconds'.format(ignoredSeconds))
+	assert cObject.df.iloc[0]['timestamp'] == pd.Timestamp('2019-09-26 10:58:30') + ignoredTimedelta
+
+
+def test_truncateDfLastLow(cObject):
+	"""assert that last row of timestamp column of dataframe is correct"""
+	assert cObject.df.iloc[-1]['timestamp'] == pd.Timestamp('2019-09-26 11:05:10')
 
 
 def test_setSensitivity(cObject):
@@ -122,8 +128,43 @@ def test_setSensitivity(cObject):
 	assert cObject.setSensitivity('S12z') == 0.625
 
 
+def test_convertCountToG(cObject):
+	assert cObject.convertCountToG(-39527) == -0.009423971176147461
+	assert cObject.convertCountToG(8250) == 0.0019669532775878906
+
+
+def test_getZeroPaddedDf(cObject):
+	"""
+	assert that dataframes returned by getZeroPaddedDf contain zero pads of 
+	correct lengths 
+	"""
+	paddedDf = cObject.getZeroPaddedDf(cObject.inputDf, ['timestamp', 'count'])
+	zeros = np.zeros(shape=(cObject.zeroPadLength))
+	zeroPad = pd.Series(zeros)
+	nullList = [None] * cObject.zeroPadLength
+	timestampHead = list(paddedDf.iloc[:cObject.zeroPadLength]['timestamp'])
+	timestampTail = list(paddedDf.iloc[-cObject.zeroPadLength:]['timestamp'])
+	countHead = list(paddedDf.iloc[:cObject.zeroPadLength]['count'])
+	countTail = list(paddedDf.iloc[-cObject.zeroPadLength:]['count'])
+	assert timestampHead == nullList
+	assert timestampTail == nullList
+	assert countHead == list(zeroPad)
+	assert countTail == list(zeroPad)
+
+
 def test_convertGToMetric(cObject):
 	assert cObject.convertGToMetric(0.07916) == 0.7762944139999999
+
+
+def test_butterPass(cObject):
+	"""assert that the returned arrays are equal up to 8 decimal places"""
+	bandB, bandA = cObject.butterPass('band')
+	highB, highA = cObject.butterPass('high')
+	np.testing.assert_almost_equal(bandB, [0.63748352, 0., -1.27496704, 0., 0.63748352], 8)
+	np.testing.assert_almost_equal(bandA, [1., -0.85279266, -0.87204231, 0.31384784, 0.41101232], 8)
+	np.testing.assert_almost_equal(highB, [0.99778102, -1.99556205, 0.99778102], 8)
+	np.testing.assert_almost_equal(highA, [1., -1.99555712, 0.99556697], 8)
+
 
 # -------------pytest examples------------------
 '''
