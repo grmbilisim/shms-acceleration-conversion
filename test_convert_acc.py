@@ -166,6 +166,22 @@ def test_butterPass(cObject):
 	np.testing.assert_almost_equal(highA, [1., -1.99555712, 0.99556697], 8)
 
 
+def test_integrateSeries(cObject):
+	inputSeries = pd.Series([-0.000393, -0.000286, -0.000049, -0.000147, -0.000438, -0.00053, -0.000383, 0.000026, 0.000019, -0.000225])
+	expectedSeries = pd.Series([0, -0.000003, -0.000005, -0.000006, -0.000009, -0.000014, -0.000018, -0.00002, -0.00002, -0.000021])
+	outputSeries = cObject.integrateSeries(inputSeries)
+	pd.testing.assert_series_equal(outputSeries.round(6), expectedSeries.round(6))
+	# pd.testing.assert_series_equal(outputSeries, expectedSeries, check_exact=False, check_less_precise=6)
+
+
+def test_removeIgnoredSamplesZeroPad(cObject):
+	"""
+	assert that length of df is correct after removing ignored samples from head
+	and zero pad from tail
+	"""
+	removedSampleCount = cObject.ignoredSamples - cObject.zeroPadLength
+	assert len(cObject.df) == 40001 - removedSampleCount
+
 # -------------pytest examples------------------
 '''
 # ---------basic

@@ -340,12 +340,14 @@ class Conversion:
 
         self.butterBandpassFilter('offset_g', 'bandpassed_g')
         self.butterBandpassFilter('acc_ms2', 'bandpassed_ms2')
-        self.integrateDfColumn('bandpassed_ms2', 'velocity_ms')
-        self.clipDf()
+        self.df['velocity_ms'] = self.integrateSeries(self.df['bandpassed_ms2'])
+
+        self.removeIgnoredSamplesZeroPad()
         self.df['detrended_velocity_ms'] = detrend(self.df['velocity_ms'], type='constant')
         self.df['detrended_velocity_cms'] = self.df['detrended_velocity_ms'].apply(lambda x: self.convertMToCm(x))
         # self.convertMToCm('detrended_velocity_ms', 'detrended_velocity_cms')
-        self.integrateDfColumn('detrended_velocity_ms', 'displacement_m')
+        self.df['displacement_m'] = self.integrateSeries(self.df['detrended_velocity_ms'])
+
         self.df['detrended_displacement_m'] = detrend(self.df['displacement_m'], type='constant')
         self.butterHighpassFilter('detrended_displacement_m', 'highpassed_displacement_m')
         self.df['highpassed_displacement_cm'] = self.df['highpassed_displacement_m'].apply(lambda x: self.convertMToCm(x))
@@ -463,9 +465,9 @@ class Conversion:
         b, a = self.butterPass('band')
         self.df[outputColumn] = lfilter(b, a, self.df[inputColumn])
 
-    def integrateDfColumn(self, inputColumn, outputColumn):
-        """integrate given dataframe column (given as string)"""
-        inputList = list(self.df[inputColumn])
+    def integrateSeries(self, inputSeries):
+        """return integrated series from given pandas series"""
+        inputList = list(inputSeries)
         inputListFromIndex1 = inputList[1:]
         zipped = zip(inputList, inputListFromIndex1)
         # values will be appended to integratedList
@@ -473,10 +475,12 @@ class Conversion:
         for z in zipped:
             integrated = self.dt * (z[0] + z[1]) / 2. + integratedList[-1]
             integratedList.append(integrated)
-        self.df[outputColumn] = integratedList
+        return pd.Series(integratedList)
 
-    def clipDf(self):
-        self.df = self.df.truncate(self.ignoredSamples, 40500, copy=False)
+    def removeIgnoredSamplesZeroPad(self):
+        """truncate self.df by removing ignored samples and zero pad at tail"""
+        endIndex = 40000 + self.zeroPadLength
+        self.df = self.df.truncate(self.ignoredSamples, endIndex, copy=False)
         self.df.reset_index(drop=True, inplace=True)
 
     def butterHighpassFilter(self, inputColumn, outputColumn):
@@ -492,10 +496,6 @@ class Conversion:
         m: int or float holding distance in m
         """
         return m * 100
-
-    # may not be used
-    def setTimestampAsIndex(self):
-        self.df.set_index('timestamp', inplace=True)
 
     def getStats(self, columnName):
         """
