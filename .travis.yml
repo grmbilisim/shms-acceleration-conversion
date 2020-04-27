@@ -5,6 +5,29 @@ python:
   - "3.7"
   - "3.8"
   - "3.8-dev"  # 3.8 development branch
+matrix:
+  include:      
+    # ======= OSX ========
+    - name: "Python 3.6.5 on macOS 10.13"
+      os: osx
+      osx_image: xcode9.4  # Python 3.6.5 running on macOS 10.13
+      language: shell       # 'language: python' is an error on Travis CI macOS
+      before_install:
+        - python3 --version
+        - pip3 install -U pip
+      install:
+        - pip3 install -r requirements.txt
+      script: python3 -m pytest
+    - name: "Python 3.7.3 on macOS 10.14"
+      os: osx
+      osx_image: xcode10.2  # Python 3.7.3 running on macOS 10.14.3
+      language: shell       # 'language: python' is an error on Travis CI macOS
+      before_install:
+        - python3 --version
+        - pip3 install -U pip
+      install:
+        - pip3 install -r requirements.txt
+      script: python3 -m pytest
 before_install:
   - python --version
   - pip install -U pip

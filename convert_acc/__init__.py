@@ -505,7 +505,7 @@ class Conversion:
         return: list holding:
             1. int holding index of peak value
             2. float holding peak value
-            3. float holding peak value rounded to three decimal places
+            3. float holding peak value rounded to four decimal places
         """
 
         minVal = self.df[columnName].min()

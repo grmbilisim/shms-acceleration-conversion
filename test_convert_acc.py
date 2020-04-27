@@ -182,6 +182,10 @@ def test_removeIgnoredSamplesZeroPad(cObject):
 	removedSampleCount = cObject.ignoredSamples - cObject.zeroPadLength
 	assert len(cObject.df) == 40001 - removedSampleCount
 
+
+def test_getStats(cObject):
+	assert cObject.getStats('highpassed_displacement_cm') == [3253, -0.16880180775299947, -0.1688]
+
 # -------------pytest examples------------------
 '''
 # ---------basic
