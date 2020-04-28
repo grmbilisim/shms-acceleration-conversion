@@ -184,7 +184,7 @@ def test_removeIgnoredSamplesZeroPad(cObject):
 
 
 def test_getStats(cObject):
-	assert cObject.getStats('highpassed_displacement_cm') == [3253, -0.16880180775299947, -0.1688]
+	assert cObject.getStats('highpassed_displacement_cm') == [3253, pytest.approx(-0.16880180775299947), -0.1688]
 
 # -------------pytest examples------------------
 '''
