@@ -4,6 +4,9 @@
 import sys
 import os
 import subprocess
+import time
+from shutil import copy
+
 import pandas as pd
 import numpy as np
 from scipy.signal import butter, lfilter, detrend
@@ -13,21 +16,10 @@ import logging
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtWidgets import QWidget
-# from PyQt5.QtCore import Qt
-# from PyQt5.QtCore import QFileInfo
-# from PyQt5.QtWidgets import QGridLayout
 from PyQt5.QtWidgets import QLineEdit
-# from PyQt5.QtWidgets import QTextEdit
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QLabel
-# from PyQt5.QtWidgets import QDialog
-# from PyQt5.QtWidgets import QDialogButtonBox
-# from PyQt5.QtWidgets import QFormLayout
-# from PyQt5.QtWidgets import QFileDialog
-# from PyQt5.QtWidgets import QErrorMessage
-# from PyQt5.QtPrintSupport import QPrinter
-# from PyQt5.QtGui import QPainter
 from PyQt5.QtWidgets import QButtonGroup
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtWidgets import QScrollArea
@@ -37,7 +29,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import pdfkit
-import time
+
 
 
 __version__ = '0.1'
@@ -677,6 +669,13 @@ class PrimaryUi(QMainWindow):
         if not os.path.isdir(self.workingDir):
             os.mkdir(self.workingDir)
 
+    def copyMiniseedToAsciiBinary(self):
+        """
+        Copy binary for mseed2ascii program to directory holding miniseed files.
+        (Edit this before building Windows binary for convert_acc)
+        """
+        copy('mseed2ascii', self.miniseedDir)
+
     def convertMiniseedToAscii(self):
         """
         Convert all miniseed files in miniseed directory to ascii files
@@ -943,6 +942,7 @@ class PrimaryUi(QMainWindow):
         self.getReadableTimestamp()
         self.setMiniseedFileInfo()
         self.setWorkingDir()
+        self.copyMiniseedToAsciiBinary()
         self.convertMiniseedToAscii()
         self.setTxtFileInfo()
         self.pairDeviceTxtFiles()
