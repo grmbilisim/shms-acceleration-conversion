@@ -595,10 +595,10 @@ class PrimaryUi(QMainWindow):
 
         self.eventTimestamp = None
         self.eventTimestampReadable = None
-        self.miniseedDirPath = None
+        self.miniseedDir = None
         self.miniseedFileList = None
         self.miniseedFileCount = None
-        self.workingBaseDir = "/home/grm/acc-data-conversion/working"
+        self.workingBaseDir = None
         self.workingDir = None
         self.txtFileList = None
         self.txtFileCount = None
@@ -631,7 +631,7 @@ class PrimaryUi(QMainWindow):
 
         # Set some of main window's properties
         self.setWindowTitle('Accelerometer Data Conversion')
-        self.setFixedSize(500, 300)
+        self.setFixedSize(500, 250)
         # Set the central widget and the general layout
         self.generalLayout = QVBoxLayout()
         self.centralWidget = QWidget(self)
@@ -639,7 +639,7 @@ class PrimaryUi(QMainWindow):
         self.centralWidget.setLayout(self.generalLayout)
         # Create the display and the buttons
         self.createTextInputFields()
-        self.createRadioButtons()
+        # self.createRadioButtons()
         self.createSubmitButton()
 
     def getEventTimestamp(self):
@@ -647,13 +647,17 @@ class PrimaryUi(QMainWindow):
         logging.debug(self.eventField.text())
         self.eventTimestamp = self.eventField.text()
 
-    def getMiniseedDirPath(self):
+    def getMiniseedDir(self):
         """Get user input (string) for miniseed directory path"""
-        self.miniseedDirPath = self.miniseedDirField.text()
+        self.miniseedDir = self.miniseedDirField.text()
+
+    def getWorkingBaseDir(self):
+        """Get user input (string) for base working directory path"""
+        self.workingBaseDir = self.workingBaseDirField.text()
 
     def setMiniseedFileInfo(self):
         """Get number of input miniseed files (must be either 24 or 48)"""
-        self.miniseedFileList = [f for f in os.listdir(self.miniseedDirPath) if f.endswith(".m")]
+        self.miniseedFileList = [f for f in os.listdir(self.miniseedDir) if f.endswith(".m")]
         self.miniseedFileCount = len(self.miniseedFileList)
         logging.debug('miniseed file count: {}'.format(self.miniseedFileCount))
         if self.miniseedFileCount not in [24, 48]:
@@ -665,7 +669,7 @@ class PrimaryUi(QMainWindow):
 
     def setWorkingDir(self):
         """
-        If not yet created, create working dir using event id entered
+        If not yet created, create working dir using event id/timestamp entered
         by user.
         """
         self.workingDir = os.path.join(self.workingBaseDir, self.eventTimestamp)
@@ -681,40 +685,47 @@ class PrimaryUi(QMainWindow):
             basename = f.rsplit(".m")[0]
             filename = basename + ".txt"
             outPath = os.path.join(self.workingDir, filename)
-            os.chdir(self.miniseedDirPath)
+            os.chdir(self.miniseedDir)
             subprocess.run(["./mseed2ascii", f, "-o", outPath])
 
     def createTextInputFields(self):
         """Create text input fields"""
         self.eventLabel = QLabel(self)
-        self.eventLabel.setText('Create event id ex. "2020-01-11T163736"')
+        self.eventLabel.setText('Timestamp of event in format "2020-01-11T163736"')
         self.miniseedDirLabel = QLabel(self)
-        self.miniseedDirLabel.setText('Path of directory holding miniseed files')
+        self.miniseedDirLabel.setText('Absolute path of directory holding miniseed files')
+        self.workingBaseDirLabel = QLabel(self)
+        self.workingBaseDirLabel.setText('Absolute path of base output directory\n(Report will be found here in new directory named with timestamp.)')
+
         self.eventField = QLineEdit(self)
         self.miniseedDirField = QLineEdit(self)
+        self.workingBaseDirField = QLineEdit(self)
+
         self.generalLayout.addWidget(self.eventLabel)
         self.generalLayout.addWidget(self.eventField)
         self.generalLayout.addWidget(self.miniseedDirLabel)
         self.generalLayout.addWidget(self.miniseedDirField)
+        self.generalLayout.addWidget(self.workingBaseDirLabel)
+        self.generalLayout.addWidget(self.workingBaseDirField)
 
     def createRadioButtons(self):
         """Create radio buttons"""
         self.approachGroup = QButtonGroup(self.centralWidget)
         self.timePlain = QRadioButton('Time-domain conversion')
         self.timePlain.setChecked(True)
-        self.timeBaseline = QRadioButton('Time-domain with baseline correction')
-        self.freqCorrection = QRadioButton('Frequency-domain with correction filter')
-        self.freqPlain = QRadioButton('Frequency-domain without correction filter')
+        # self.timeBaseline = QRadioButton('Time-domain with baseline correction')
+        # self.freqCorrection = QRadioButton('Frequency-domain with correction filter')
+        # self.freqPlain = QRadioButton('Frequency-domain without correction filter')
 
         self.approachGroup.addButton(self.timePlain)
-        self.approachGroup.addButton(self.timeBaseline)
-        self.approachGroup.addButton(self.freqCorrection)
-        self.approachGroup.addButton(self.freqPlain)
+        # self.approachGroup.addButton(self.timeBaseline)
+        # self.approachGroup.addButton(self.freqCorrection)
+        # self.approachGroup.addButton(self.freqPlain)
 
         self.generalLayout.addWidget(self.timePlain)
-        self.generalLayout.addWidget(self.timeBaseline)
-        self.generalLayout.addWidget(self.freqCorrection)
-        self.generalLayout.addWidget(self.freqPlain)
+        # self.generalLayout.addWidget(self.timeBaseline)
+        # self.generalLayout.addWidget(self.freqCorrection)
+        # self.generalLayout.addWidget(self.freqPlain)
 
     def setTxtFileInfo(self):
         """Set list of sorted input text file paths and number of text files"""
@@ -794,22 +805,24 @@ class PrimaryUi(QMainWindow):
         add subplot of displacement to ComparisonCanvas if self.sensorCodeWithChannel meets criteria
         """
         displacementMaxVal = self.statsColumnMaxValues[-1]
+        # add 15% of maxVal to maxVal to get range of plots along y-axis
+        yLimit = displacementMaxVal + displacementMaxVal * 0.15
         if all(i in conversionObject.sensorCodeWithChannel for i in ['N', 'x']):
-            conversionObject.plotComparisonGraph(self.NXcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.NXcomparisonCanvas, yLimit)
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['S', 'x']):
-            conversionObject.plotComparisonGraph(self.SXcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.SXcomparisonCanvas, yLimit)
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['N', 'y']):
-            conversionObject.plotComparisonGraph(self.NYcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.NYcomparisonCanvas, yLimit)
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['S', 'y']):
-            conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, yLimit)
 
         # B4 data to appear on the x or y canvases no matter what
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['B', 'x']):
-            conversionObject.plotComparisonGraph(self.SXcomparisonCanvas, displacementMaxVal)
-            conversionObject.plotComparisonGraph(self.NXcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.SXcomparisonCanvas, yLimit)
+            conversionObject.plotComparisonGraph(self.NXcomparisonCanvas, yLimit)
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['B', 'y']):
-            conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, displacementMaxVal)
-            conversionObject.plotComparisonGraph(self.NYcomparisonCanvas, displacementMaxVal)
+            conversionObject.plotComparisonGraph(self.SYcomparisonCanvas, yLimit)
+            conversionObject.plotComparisonGraph(self.NYcomparisonCanvas, yLimit)
 
     def getConversionObjectFromTwoTxtFiles(self, txtFilePair):
         """
@@ -925,7 +938,8 @@ class PrimaryUi(QMainWindow):
 
     def processUserInput(self):
         self.getEventTimestamp()
-        self.getMiniseedDirPath()
+        self.getMiniseedDir()
+        self.getWorkingBaseDir()
         self.getReadableTimestamp()
         self.setMiniseedFileInfo()
         self.setWorkingDir()
