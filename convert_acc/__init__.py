@@ -23,6 +23,8 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QButtonGroup
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtWidgets import QScrollArea
+from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QProgressBar
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_pdf import PdfPages
@@ -1100,7 +1102,3 @@ def main():
 
     # Execute the program's main loop
     sys.exit(convertacc.exec_())
-
-
-if __name__ == '__main__':
-    main()
