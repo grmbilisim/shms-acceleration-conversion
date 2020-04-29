@@ -30,8 +30,7 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-import pdfkit
-
+from weasyprint import HTML
 
 
 __version__ = '0.1'
@@ -298,8 +297,6 @@ class Conversion:
         self.accBandpassedStats = None
         self.velStats = None
         self.dispStats = None
-        self.workingBaseDir = "/home/grm/acc-data-conversion/working"
-        self.workingDir = os.path.join(self.workingBaseDir, self.eventTimestamp)
 
         # these may be taken from user in future
         # low cutoff frequency for bandpass and highpass filters
@@ -1012,16 +1009,16 @@ class StatsTable:
             htmlFilename = 'stats_table_acc.html'
             pdfFilename = 'stats_table_acc.pdf'
 
-        tableTemplate = r'/home/grm/acc-data-conversion/shms-acceleration-conversion/convert_acc/stats_table_template.html'
+        cwd = os.path.abspath(os.path.dirname(__file__))
+        tableTemplate = os.path.join(cwd, 'stats_table_template.html')
         with open(tableTemplate, 'r') as inFile:
             newText = inFile.read().replace('insert table', html)
 
-        htmlFile = os.path.join(workingDir, htmlFilename)
-        with open(htmlFile, 'w') as outFile:
-            outFile.write(newText)
+        # get WeasyPrint HTML object
+        wpHtml = HTML(string=newText)
 
         pdfFile = os.path.join(workingDir, pdfFilename)
-        pdfkit.from_file(htmlFile, pdfFile)
+        wpHtml.write_pdf(pdfFile)
 
 
 # Comparison Figure objects were going to be used to display four plots but ...
