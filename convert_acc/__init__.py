@@ -993,6 +993,19 @@ class StatsTable:
         """print stats table to console"""
         print(self.df)
 
+    def getResourcePath(self, relativePath):
+        """ 
+        Get absolute path to resource, works for dev and for PyInstaller 
+        relativePath: string holding relative path of file whose absolute path will be returned
+        """
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            basePath = sys._MEIPASS
+        except Exception:
+            basePath = os.path.abspath(".")
+
+        return os.path.join(basePath, relativePath)
+
     def tableToPdf(self, workingDir, columns='all'):
         """
         convert stats table to pdf (via html)
@@ -1009,8 +1022,10 @@ class StatsTable:
             htmlFilename = 'stats_table_acc.html'
             pdfFilename = 'stats_table_acc.pdf'
 
-        cwd = os.path.abspath(os.path.dirname(__file__))
-        tableTemplate = os.path.join(cwd, 'stats_table_template.html')
+        # will this path work both locally and in executable?
+
+        tableTemplate = self.getResourcePath('stats_table_template.html')
+        
         with open(tableTemplate, 'r') as inFile:
             newText = inFile.read().replace('insert table', html)
 
