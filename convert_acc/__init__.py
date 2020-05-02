@@ -198,6 +198,21 @@ def sortFiles(inputFileList):
         return firstFileList + secondFileList
 
 
+def getResourcePath(relativePath):
+    """ 
+    Get absolute path to resource, works for dev and for PyInstaller 
+    relativePath: string holding relative path of file whose absolute path will be returned
+    return: string holding absolute path of given file
+    """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        basePath = sys._MEIPASS
+    except Exception:
+        basePath = os.path.abspath("./convert_acc")
+
+    return os.path.join(basePath, relativePath)
+
+
 # get clean df from single text file
 class ProcessedFromTxtFile:
     def __init__(self, txtFilePath):
@@ -673,18 +688,23 @@ class PrimaryUi(QMainWindow):
         Copy binary for mseed2ascii program to directory holding miniseed files.
         (Edit this before building Windows binary for convert_acc)
         """
-        copy('mseed2ascii', self.miniseedDir)
+        binaryPath = getResourcePath('resources/mseed2ascii')
+        copy(binaryPath, self.miniseedDir)
 
     def convertMiniseedToAscii(self):
         """
         Convert all miniseed files in miniseed directory to ascii files
         """
+        binaryPath = os.path.join(self.miniseedDir, 'mseed2ascii')
+
         for f in self.miniseedFileList:
+            mseedPath = os.path.join(self.miniseedDir, f)
             basename = f.rsplit(".m")[0]
             filename = basename + ".txt"
             outPath = os.path.join(self.workingDir, filename)
-            os.chdir(self.miniseedDir)
-            subprocess.run(["./mseed2ascii", f, "-o", outPath])
+            # os.chdir(self.miniseedDir)
+            # subprocess.run(["./mseed2ascii", f, "-o", outPath])
+            subprocess.run([binaryPath, mseedPath, "-o", outPath])
 
     def createTextInputFields(self):
         """Create text input fields"""
@@ -993,19 +1013,6 @@ class StatsTable:
         """print stats table to console"""
         print(self.df)
 
-    def getResourcePath(self, relativePath):
-        """ 
-        Get absolute path to resource, works for dev and for PyInstaller 
-        relativePath: string holding relative path of file whose absolute path will be returned
-        """
-        try:
-            # PyInstaller creates a temp folder and stores path in _MEIPASS
-            basePath = sys._MEIPASS
-        except Exception:
-            basePath = os.path.abspath(".")
-
-        return os.path.join(basePath, relativePath)
-
     def tableToPdf(self, workingDir, columns='all'):
         """
         convert stats table to pdf (via html)
@@ -1024,7 +1031,7 @@ class StatsTable:
 
         # will this path work both locally and in executable?
 
-        tableTemplate = self.getResourcePath('stats_table_template.html')
+        tableTemplate = getResourcePath('resources/stats_table_template.html')
         
         with open(tableTemplate, 'r') as inFile:
             newText = inFile.read().replace('insert table', html)
