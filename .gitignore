@@ -1,5 +1,5 @@
 __pycache__/
 convert_acc/__pycache__/
 *.spec
-dist/
+dist*/
 build/

@@ -8,7 +8,7 @@ import time
 from shutil import copy
 
 import pandas as pd
-import numpy as np
+# import numpy as np
 from scipy.signal import butter, lfilter, detrend
 from fpdf import FPDF
 from PyPDF2 import PdfFileMerger
@@ -421,7 +421,8 @@ class Conversion:
             returned in new dataframe ['timestamp', 'g']
         return: pandas dataframe with only padded columns
         """
-        zeros = np.zeros(shape=(self.zeroPadLength))
+        # zeros = np.zeros(shape=(self.zeroPadLength))
+        zeros = [0] * self.zeroPadLength
         zeroPad = pd.Series(zeros)
         nullList = [None] * self.zeroPadLength
         nullSeries = pd.Series(nullList)
