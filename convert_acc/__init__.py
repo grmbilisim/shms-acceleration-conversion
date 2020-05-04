@@ -8,7 +8,6 @@ import time
 from shutil import copy
 
 import pandas as pd
-# import numpy as np
 from scipy.signal import butter, lfilter, detrend
 from fpdf import FPDF
 from PyPDF2 import PdfFileMerger
@@ -23,8 +22,9 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QButtonGroup
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtWidgets import QScrollArea
-from PyQt5.QtWidgets import QDialog
-from PyQt5.QtWidgets import QProgressBar
+# from PyQt5.QtWidgets import QDialog
+# from PyQt5.QtWidgets import QProgressBar
+from PyQt5.QtWidgets import QMessageBox
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_pdf import PdfPages
@@ -610,6 +610,7 @@ class PrimaryUi(QMainWindow):
         self.txtFileList = None
         self.txtFileCount = None
         self.pairedTxtFileList = []
+        self.progress = QMessageBox(self)
 
         self.statsTable = StatsTable()
         self.offsetGResultsCanvas = ResultsCanvas('Acceleration (g)')
@@ -771,6 +772,15 @@ class PrimaryUi(QMainWindow):
             for c in SENSOR_CODES_WITH_CHANNELS:
                 pairedList = [f for f in txtFileSensorCodeList if c in f]
                 self.pairedTxtFileList.append(pairedList)
+
+    def showProgress(self):
+        """show progress message box to user after submit button clicked"""
+        self.progress.setIcon(QMessageBox.Information)
+        self.progress.setText("Processing acceleration data")
+        self.progress.setWindowTitle("In Progress")
+        # probably not necessary
+        self.progress.setModal(False)
+        self.progress.show()
 
     def updateStatsTable(self, conversionObject):
         """update row of stats table with max values at each of the (currently four) parameters"""
@@ -943,7 +953,9 @@ class PrimaryUi(QMainWindow):
                 self.drawResultsPlots(c)
                 self.drawComparisonPlot(c)
 
+        self.progress.close()
         self.showCanvases()
+        
         seconds = time.time() - start_time
         print("--- {} minutes ---".format(seconds / 60.0))
 
@@ -966,8 +978,9 @@ class PrimaryUi(QMainWindow):
         self.convertMiniseedToAscii()
         self.setTxtFileInfo()
         self.pairDeviceTxtFiles()
+        self.showProgress()
         self.getResults()
-
+        
     def createSubmitButton(self):
         """Create single submit button"""
         self.submitBtn = QPushButton(self)
