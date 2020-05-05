@@ -778,7 +778,7 @@ class PrimaryUi(QMainWindow):
         self.progress.setIcon(QMessageBox.Information)
         self.progress.setText("Processing acceleration data")
         self.progress.setWindowTitle("In Progress")
-        # probably not necessary
+        # probably not necessarygi
         self.progress.setModal(False)
         self.progress.show()
 
