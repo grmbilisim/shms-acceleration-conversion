@@ -24,6 +24,9 @@ from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtWidgets import QScrollArea
 # from PyQt5.QtWidgets import QDialog
 # from PyQt5.QtWidgets import QProgressBar
+from PyQt5.QtCore import QRegExp
+from PyQt5.QtGui import QRegExpValidator
+# from PyQt5.QtWidgets import QErrorMessage
 from PyQt5.QtWidgets import QMessageBox
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -242,7 +245,7 @@ class ProcessedFromTxtFile:
         for item in self.headerList:
             try:
                 timestamp = pd.Timestamp(item)
-            except:
+            except ValueError:
                 pass
         if timestamp:
             return timestamp
@@ -600,6 +603,7 @@ class PrimaryUi(QMainWindow):
         """View initializer."""
         super().__init__()
 
+        # self.eventTimestamp is string (converted to pd.Timestamp when necessary)
         self.eventTimestamp = None
         self.eventTimestampReadable = None
         self.miniseedDir = None
@@ -650,17 +654,25 @@ class PrimaryUi(QMainWindow):
         # self.createRadioButtons()
         self.createSubmitButton()
 
-    def getEventTimestamp(self):
-        """Get user input (string) for event id field"""
+        self.validateEventTimestamp()
+
+    def validateEventTimestamp(self):
+        """Confirm event timestamp is entered in correct format"""
+        regEx = QRegExp("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}")
+        timestampValidator = QRegExpValidator(regEx, self)
+        self.eventField.setValidator(timestampValidator)
+
+    def setEventTimestamp(self):
+        """Set event timestamp (string) based on user input"""
         logging.debug(self.eventField.text())
         self.eventTimestamp = self.eventField.text()
 
-    def getMiniseedDir(self):
-        """Get user input (string) for miniseed directory path"""
+    def setMiniseedDir(self):
+        """Set miniseed directory path based on user input"""
         self.miniseedDir = self.miniseedDirField.text()
 
-    def getWorkingBaseDir(self):
-        """Get user input (string) for base working directory path"""
+    def setWorkingBaseDir(self):
+        """Set base working directory path based on user input"""
         self.workingBaseDir = self.workingBaseDirField.text()
 
     def setMiniseedFileInfo(self):
@@ -968,9 +980,9 @@ class PrimaryUi(QMainWindow):
         self.combinePdfs()
 
     def processUserInput(self):
-        self.getEventTimestamp()
-        self.getMiniseedDir()
-        self.getWorkingBaseDir()
+        self.setEventTimestamp()
+        self.setMiniseedDir()
+        self.setWorkingBaseDir()
         self.getReadableTimestamp()
         self.setMiniseedFileInfo()
         self.setWorkingDir()
