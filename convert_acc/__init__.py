@@ -6,6 +6,7 @@ import os
 import subprocess
 import time
 from shutil import copy
+from platform import system
 
 import pandas as pd
 from scipy.signal import butter, lfilter, detrend
@@ -603,6 +604,7 @@ class PrimaryUi(QMainWindow):
         """View initializer."""
         super().__init__()
 
+        self.platform = system()
         # self.eventTimestamp is string (converted to pd.Timestamp when necessary)
         self.eventTimestamp = None
         self.eventTimestampReadable = None
@@ -654,7 +656,7 @@ class PrimaryUi(QMainWindow):
         # self.createRadioButtons()
         self.createSubmitButton()
 
-        self.validateEventTimestamp()
+        # self.validateEventTimestamp()
 
         self.eventField.textChanged.connect(self.enableSubmitButton)
         self.miniseedDirField.textChanged.connect(self.enableSubmitButton)
@@ -662,16 +664,25 @@ class PrimaryUi(QMainWindow):
 
     def enableSubmitButton(self):
         """Allow click on submit button if all fields are populated"""
-        if len(self.eventField.text()) > 0 and \
+        if  self.validateEventTimestamp()[0] == 2 and \
             len(self.miniseedDirField.text()) > 0 and \
             len(self.workingBaseDirField.text()) > 0 :
                 self.submitBtn.setEnabled(True)
 
     def validateEventTimestamp(self):
-        """Confirm event timestamp is entered in correct format"""
+        """
+        Confirm event timestamp is entered in correct format
+        return tuple in form: (2, '2019-09-26T135930', 0) if input valid
+        (if valid, first item of tuple == 2)
+        """
         regEx = QRegExp("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}")
         timestampValidator = QRegExpValidator(regEx, self)
-        self.eventField.setValidator(timestampValidator)
+        result = timestampValidator.validate(self.eventField.text(), 0)
+        return result
+        # self.eventField.setValidator(timestampValidator)
+
+    def validateMiniseedDir(self):
+        pass
 
     def setEventTimestamp(self):
         """Set event timestamp (string) based on user input"""
