@@ -656,6 +656,17 @@ class PrimaryUi(QMainWindow):
 
         self.validateEventTimestamp()
 
+        self.eventField.textChanged.connect(self.enableSubmitButton)
+        self.miniseedDirField.textChanged.connect(self.enableSubmitButton)
+        self.workingBaseDirField.textChanged.connect(self.enableSubmitButton)
+
+    def enableSubmitButton(self):
+        """Allow click on submit button if all fields are populated"""
+        if len(self.eventField.text()) > 0 and \
+            len(self.miniseedDirField.text()) > 0 and \
+            len(self.workingBaseDirField.text()) > 0 :
+                self.submitBtn.setEnabled(True)
+
     def validateEventTimestamp(self):
         """Confirm event timestamp is entered in correct format"""
         regEx = QRegExp("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}")
@@ -994,12 +1005,13 @@ class PrimaryUi(QMainWindow):
         self.getResults()
         
     def createSubmitButton(self):
-        """Create single submit button"""
+        """Create single submit button - default state is inactive"""
         self.submitBtn = QPushButton(self)
         self.submitBtn.setText("Submit")
         # using only plain time-domain approach now - add others later
         self.submitBtn.clicked.connect(self.processUserInput)
         self.generalLayout.addWidget(self.submitBtn)
+        self.submitBtn.setEnabled(False)
 
 
 # table holding peak values for acceleration, velocity, and displacement for each
