@@ -294,7 +294,7 @@ class ProcessedFromTxtFile:
         logging.info(self.df.head())
 
 
-# class used to convert data (from single dataframe) from
+# class used to convert data (in single dataframe) from
 # count to acceleration, velocity, and displacement
 class Conversion:
     def __init__(self, df, sensorCode, sensorCodeWithChannel, eventTimestamp):
@@ -596,7 +596,7 @@ class Conversion:
         canvasObject.figure.tight_layout()
 
 
-# Create a subclass of QMainWindow to set up the portion of GUI
+# subclass of QMainWindow to set up the portion of GUI
 # to take information from user and serve as controller of program
 class PrimaryUi(QMainWindow):
     """AccConvert's initial view for taking input from user."""
@@ -656,38 +656,35 @@ class PrimaryUi(QMainWindow):
         # self.createRadioButtons()
         self.createSubmitButton()
 
-        # self.validateEventTimestamp()
-
         self.eventField.textChanged.connect(self.enableSubmitButton)
         self.miniseedDirField.textChanged.connect(self.enableSubmitButton)
         self.workingBaseDirField.textChanged.connect(self.enableSubmitButton)
 
     def enableSubmitButton(self):
-        """Allow click on submit button if all fields are populated"""
-        if  self.validateEventTimestamp()[0] == 2 and \
-            len(self.miniseedDirField.text()) > 0 and \
-            len(self.workingBaseDirField.text()) > 0 :
+        """Allow click on submit button if all fields contain valid input"""
+        if  self.isEventTimestampValid() and \
+            self.isDirPathValid(self.miniseedDirField) and \
+            self.isDirPathValid(self.workingBaseDirField):
                 self.submitBtn.setEnabled(True)
-
-    def validateEventTimestamp(self):
-        """
-        Confirm event timestamp is entered in correct format
-        return tuple in form: (2, '2019-09-26T135930', 0) if input valid
-        (if valid, first item of tuple == 2)
-        """
-        regEx = QRegExp("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}")
-        timestampValidator = QRegExpValidator(regEx, self)
-        result = timestampValidator.validate(self.eventField.text(), 0)
-        return result
-        # self.eventField.setValidator(timestampValidator)
-
-    def validateMiniseedDir(self):
-        pass
 
     def setEventTimestamp(self):
         """Set event timestamp (string) based on user input"""
         logging.debug(self.eventField.text())
         self.eventTimestamp = self.eventField.text()
+
+    def isEventTimestampValid(self):
+        """
+        Confirm event timestamp is entered in correct format
+        return: boolean (True if valid)
+        """
+        regEx = QRegExp("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}")
+        timestampValidator = QRegExpValidator(regEx, self)
+        result = timestampValidator.validate(self.eventField.text(), 0)
+        # validate() returns tuple with 2 as first item if valid
+        if result[0] == 2:
+            return True
+        else:
+            return False
 
     def setMiniseedDir(self):
         """Set miniseed directory path based on user input"""
@@ -697,13 +694,44 @@ class PrimaryUi(QMainWindow):
         """Set base working directory path based on user input"""
         self.workingBaseDir = self.workingBaseDirField.text()
 
+    def isDirPathValid(self, field):
+        """
+        Confirm that entered directory path exists
+        field: name of field holding path entered by user
+        return: boolean (True if path exists)
+        """
+        if os.path.exists(field.text()):
+            return True
+        else:
+            return False
+
+    def isWorkingDirWritable(self):
+        """Return true if entered working directory is writable"""
+        if os.access(os.path.dirname(self.workingBaseDirField.text()), os.W_OK):
+            return True
+        else:
+            message = QMessageBox(QMessageBox.Critical, 'Invalid Input', 'Working directory is not writable. Please choose another location.', QMessageBox.Ok)
+            message.exec_()
+            return False
+
     def setMiniseedFileInfo(self):
-        """Get number of input miniseed files (must be either 24 or 48)"""
+        """
+        Set: 
+            -list of strings holding miniseed file names
+            -variable holding integer with number of miniseed files
+        """
         self.miniseedFileList = [f for f in os.listdir(self.miniseedDir) if f.endswith(".m")]
         self.miniseedFileCount = len(self.miniseedFileList)
         logging.debug('miniseed file count: {}'.format(self.miniseedFileCount))
+
+    def isMiniseedCountValid(self):
+        """Return true if number of miniseed files in miniseed directory is either 24 or 48"""
         if self.miniseedFileCount not in [24, 48]:
-            raise ValueError('number of input miniseed files must be 24 or 48 - check directory holding miniseed files')
+            message = QMessageBox(QMessageBox.Critical, 'Invalid Input', 'Miniseed directory must contain either 24 or 48 files with extension .m', QMessageBox.Ok)
+            message.exec_()
+            return False
+        else:
+            return True
 
     def getReadableTimestamp(self):
         eventTimestamp = pd.Timestamp(self.eventTimestamp)
@@ -1005,8 +1033,12 @@ class PrimaryUi(QMainWindow):
         self.setEventTimestamp()
         self.setMiniseedDir()
         self.setWorkingBaseDir()
-        self.getReadableTimestamp()
         self.setMiniseedFileInfo()
+        if not self.isMiniseedCountValid():
+            return
+        if not self.isWorkingDirWritable():
+            return
+        self.getReadableTimestamp()
         self.setWorkingDir()
         self.copyMiniseedToAsciiBinary()
         self.convertMiniseedToAscii()
