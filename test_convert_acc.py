@@ -186,6 +186,14 @@ def test_removeIgnoredSamplesZeroPad(cObject):
 def test_getStats(cObject):
 	assert cObject.getStats('highpassed_displacement_cm') == [3253, pytest.approx(-0.16880180775299947), -0.1688]
 
+'''
+def test_isEventTimestampValid(iObject):
+	"""may not be necessary as mostly checking PyQt5 objects and methods"""
+	assert iObject.isEventTimestampValid('2019-09-26T135930') == True
+	assert iObject.isEventTimestampValid('2019-09-26T13593') == False
+	assert iObject.isEventTimestampValid('') == False
+	assert iObject.isEventTimestampValid(None) == False
+'''
 # -------------pytest examples------------------
 '''
 # ---------basic

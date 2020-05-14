@@ -34,7 +34,11 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-from weasyprint import HTML
+# for conversion of tables to pdf: use weasyprint on Linux, xhtml2pdf on Windows, ? on MacOS
+try:
+    from weasyprint import HTML
+except ImportError:
+    from xhtml2pdf import pisa
 
 
 __version__ = '0.1'
@@ -287,6 +291,7 @@ class ProcessedFromTxtFile:
         # add new columns to dataframe
         self.df['count'] = self.df[self.getCountColumnHeader()]
         self.df['timestamp'] = self.getTimestampSeries()
+        # print('dtypes of clean df: {0}'.format(self.df.dtypes))
         requiredColumns = ['timestamp', 'count']
         extraneousColumns = [header for header in self.headerList if header not in requiredColumns]
         for c in extraneousColumns:
@@ -390,6 +395,8 @@ class Conversion:
         eventTimestamp = eventTimestamp - pd.Timedelta('3 hours')
         startTime = eventTimestamp - pd.Timedelta('1 minute')
         endTime = startTime + pd.Timedelta('400 seconds')
+        # print('type of startTime: {0}'.format(type(startTime)))
+        # print('dtypes of inputDf: {0}'.format(self.inputDf.dtypes))
         startIndex = self.inputDf.index[self.inputDf['timestamp'] == startTime][0]
         endIndex = self.inputDf.index[self.inputDf['timestamp'] == endTime][0]
         return startIndex, endIndex
@@ -1097,8 +1104,8 @@ class StatsTable:
     def tableToPdf(self, workingDir, columns='all'):
         """
         convert stats table to pdf (via html)
-        workingDir: string holding absolute path of working directory where pdf will be stored
-        columns = string holding 'all' for all columns or 'acceleration' for bandpassed acceleration only
+        workingDir: string holding path to working directory (where pdf will be created)
+        columns: string holding 'all' for all columns or 'acceleration' for bandpassed acceleration only
         """
         if columns == 'all':
             html = self.df.to_html(index=False, border=0)
@@ -1110,18 +1117,35 @@ class StatsTable:
             htmlFilename = 'stats_table_acc.html'
             pdfFilename = 'stats_table_acc.pdf'
 
-        # will this path work both locally and in executable?
-
         tableTemplate = getResourcePath('resources/stats_table_template.html')
+        tableStyle = getResourcePath('resources/stats_table_style.css')
         
+        # replace blank lines in table template with table content
         with open(tableTemplate, 'r') as inFile:
-            newText = inFile.read().replace('insert table', html)
+            tableText = inFile.read().replace('insert table', html)
 
-        # get WeasyPrint HTML object
-        wpHtml = HTML(string=newText)
+        # create html version of stats table
+        htmlTable = os.path.join(workingDir, htmlFilename)
+        with open(htmlTable, 'w+') as resultTable:
+            resultTable.write(tableText)
 
         pdfFile = os.path.join(workingDir, pdfFilename)
-        wpHtml.write_pdf(pdfFile)
+
+        # WeasyPrint will be installed on Linux, not Windows, maybe MacOS
+        try:
+            # get WeasyPrint HTML object
+            wpHtml = HTML(string=tableText)
+            wpHtml.write_pdf(pdfFile)
+        except:
+            # read contents of html table and css style and assign to variables
+            with open(htmlTable, 'r') as resultTable:
+                tableString = resultTable.read()
+
+            with open(tableStyle, 'r') as style:
+                styleString = style.read()
+
+            with open(pdfFile, 'w+b') as resultFile:
+                pisa.CreatePDF(tableString, resultFile, default_css=styleString)
 
 
 # Comparison Figure objects were going to be used to display four plots but ...
