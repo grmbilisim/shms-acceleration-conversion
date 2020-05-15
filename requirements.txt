@@ -1,6 +1,6 @@
 altgraph==0.17
 attrs==19.3.0
-cairocffi==1.1.0
+cairocffi==1.1.0; sys_platform == 'linux'
 CairoSVG==2.4.2
 certifi==2020.4.5.1
 cffi==1.14.0
@@ -11,7 +11,6 @@ cycler==0.10.0
 decorator==4.4.2
 defusedxml==0.6.0
 entrypoints==0.3
-flake8==3.7.9
 fpdf==1.7.2
 future==0.18.2
 html5lib==1.0.1
@@ -32,7 +31,6 @@ py==1.8.1
 pycodestyle==2.5.0
 pycparser==2.20
 pyflakes==2.1.1
-PyInstaller==3.6
 pyparsing==2.4.6
 PyPDF2==1.26.0
 Pyphen==0.9.5
@@ -42,14 +40,15 @@ pytest==5.4.1
 pytest-cov==2.8.1
 python-dateutil==2.8.1
 pytz==2019.3
-reportlab==3.5.42
+reportlab==3.5.42; sys_platform != 'linux'
 requests==2.23.0
 scipy==1.4.1
 six==1.14.0
 tinycss2==1.0.2
 urllib3==1.25.9
 wcwidth==0.1.9
-WeasyPrint==51
+WeasyPrint==51; sys_platform == 'linux'
 webencodings==0.5.1
-xhtml2pdf==0.2.4
+xhtml2pdf==0.2.4; sys_platform != 'linux'
 zipp==1.2.0
+
