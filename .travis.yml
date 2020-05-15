@@ -35,7 +35,7 @@ matrix:
       before_install:
         - choco install python --version 3.5.4
         - python --version
-        - python -m pip install --upgrade pip
+        - pip3 install -U pip
         - pip3 install --upgrade pytest
       env: PATH=/c/Python35:/c/Python35/Scripts:$PATH
     - name: "Python 3.6.8 on Windows"
@@ -44,7 +44,7 @@ matrix:
       before_install:
         - choco install python --version 3.6.8
         - python --version
-        - python -m pip install --upgrade pip
+        - pip3 install -U pip
         - pip3 install --upgrade pytest
       env: PATH=/c/Python36:/c/Python36/Scripts:$PATH
     - name: "Python 3.7.4 on Windows"
@@ -53,7 +53,7 @@ matrix:
       before_install:
         - choco install python --version 3.7.4
         - python --version
-        - python -m pip install --upgrade pip
+        - pip3 install -U pip
         - pip3 install --upgrade pytest
       env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
 before_install:
