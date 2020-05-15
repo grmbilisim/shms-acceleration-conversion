@@ -1,15 +1,15 @@
 altgraph==0.17
 attrs==19.3.0
 cairocffi==1.1.0; sys_platform == 'linux'
-CairoSVG==2.4.2
+CairoSVG==2.4.2; sys_platform == 'linux'
 certifi==2020.4.5.1
-cffi==1.14.0
+cffi==1.14.0; sys_platform == 'linux'
 chardet==3.0.4
 coverage==5.1
-cssselect2==0.3.0
+cssselect2==0.3.0; sys_platform == 'linux'
 cycler==0.10.0
 decorator==4.4.2
-defusedxml==0.6.0
+defusedxml==0.6.0; sys_platform == 'linux'
 entrypoints==0.3
 fpdf==1.7.2
 future==0.18.2
@@ -29,11 +29,11 @@ Pillow==7.0.0
 pluggy==0.13.1
 py==1.8.1
 pycodestyle==2.5.0
-pycparser==2.20
+pycparser==2.20; sys_platform == 'linux'
 pyflakes==2.1.1
 pyparsing==2.4.6
 PyPDF2==1.26.0
-Pyphen==0.9.5
+Pyphen==0.9.5; sys_platform == 'linux'
 PyQt5==5.14.1
 PyQt5-sip==12.7.1
 pytest==5.4.1
@@ -44,11 +44,12 @@ reportlab==3.5.42; sys_platform != 'linux'
 requests==2.23.0
 scipy==1.4.1
 six==1.14.0
-tinycss2==1.0.2
+tinycss2==1.0.2; sys_platform == 'linux'
 urllib3==1.25.9
 wcwidth==0.1.9
 WeasyPrint==51; sys_platform == 'linux'
 webencodings==0.5.1
 xhtml2pdf==0.2.4; sys_platform != 'linux'
 zipp==1.2.0
+
 
