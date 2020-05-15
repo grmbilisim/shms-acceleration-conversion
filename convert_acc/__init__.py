@@ -6,13 +6,12 @@ import os
 import subprocess
 import time
 from shutil import copy
-from platform import system
+import logging
 
 import pandas as pd
 from scipy.signal import butter, lfilter, detrend
 from fpdf import FPDF
 from PyPDF2 import PdfFileMerger
-import logging
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtWidgets import QWidget
@@ -34,7 +33,9 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-# for conversion of tables to pdf: use weasyprint on Linux, xhtml2pdf on Windows, ? on MacOS
+
+from obspy import read
+# for conversion of tables to pdf: use weasyprint on Linux, xhtml2pdf on Windows and MacOS
 try:
     from weasyprint import HTML
 except ImportError:
@@ -611,7 +612,6 @@ class PrimaryUi(QMainWindow):
         """View initializer."""
         super().__init__()
 
-        self.platform = system()
         # self.eventTimestamp is string (converted to pd.Timestamp when necessary)
         self.eventTimestamp = None
         self.eventTimestampReadable = None
