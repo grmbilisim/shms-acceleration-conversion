@@ -4,7 +4,7 @@ from obspy import read
 import pandas as pd
 import time
 
-start_time = time.time()
+startTime = time.time()
 print(time.strftime("start time after imports: %a, %d %b %Y %H:%M:%S", time.localtime()))
 
 # get clean df from single miniseed file
@@ -22,17 +22,21 @@ class DfFromMseed:
 
     def mseedToTxt(self):
         """
-        convert miniseed file to txt file
+        convert miniseed file to txt file - will not be processed but text file will contain
+        timestamp and count values as string in single column
         return: string holding path of new txt file
         """
+        tspairStartTime = time.time()
         mseedFilename = self.mseedFilePath.split('/')[-1]
         txtFilename = mseedFilename.replace('.m', '.txt')
         txtFilePath = os.path.join(self.workingDir, txtFilename)
         stream = read(self.mseedFilePath)
         try:
-            stream.write(txtFilePath, format='SLIST')
+            stream.write(txtFilePath, format='TSPAIR')
         except Exception as e:
             print('error converting miniseed to text file: {0}'.format(e))
+        tspairTime = time.time() - tspairStartTime
+        print('tspair file written in {0} seconds'.format(tspairTime))
         return txtFilePath
 
     def getOriginalHeader(self):
@@ -41,50 +45,23 @@ class DfFromMseed:
         return [item.strip() for item in list(tempDf.columns.values)]
 
     def convertTxtToDf(self):
-    	"""return pandas dataframe converted from text file with no processing"""
-        # without reset index here, count data (sep by \t) will get set as index
-    	df = pd.read_csv(self.txtFilePath, header=0, sep='\t').reset_index()
-    	return df
+        """return pandas dataframe converted from text file with no processing"""
+        df = pd.read_csv(self.txtFilePath, header=0)
+        return df
 
-    def getCountSeries(self):
-        """
-        return pandas series holding counts from raw df (with count data in multiple columns)
-        """
-        countStartTime = time.time()
-        rowGenerator = self.rawDf.iterrows()
-        counts = []
-        for i in rowGenerator:
-            for x in range(6):
-                counts.append(i[1][x])
-        countSeconds = time.time() - countStartTime
-        print("--- {} seconds to create counts list ---".format(countSeconds))
-        return pd.Series(counts)
-
-    def getTimestamp(self):
-        """
-        get pandas timestamp from among column headers
-        return: pandas Timestamp object or None
-        """
-        timestamp = None
-        for item in self.headerList:
-            try:
-                pd.Timestamp(item)
-                return pd.Timestamp(item)
-            except:
-                pass
-
-    def getTimestampSeries(self):
-        """get pandas series holding all necessary timestamps for given hour"""
-        startTime = self.getTimestamp()
-        # time delta between entries: 0.01 s
-        timeDelta = pd.Timedelta('0 days 00:00:00.01000')
-        # time period covered by entire file after first entry - 1 hour minus 0.01 s
-        filePeriod = pd.Timedelta('0 days 00:59:59.990000')
-        endTime = startTime + filePeriod
-        # create timestamp series
-        timestampSeries = pd.Series(pd.date_range(start=startTime, end=endTime, freq=timeDelta))
-
-        return timestampSeries
+    def getSeparateSeries(self):
+        """get separate timestamp and count series"""
+        # get series holding timestamps and counts as single string
+        singleColumnDf = self.rawDf.iloc[:, [0]]
+        header = singleColumnDf.columns[0]
+        # get separate series with string as dtype
+        timestampSeries = pd.Series()
+        countSeries = pd.Series()
+        timestampSeries, countSeries = singleColumnDf[header].str.split(' ', 1).str
+        # cast series to respective datatypes
+        #timestampSeries.astype(pd.Timestamp)
+        countSeries.astype('int32')
+        return timestampSeries, countSeries
 
     def getCleanDf(self):
         """
@@ -92,8 +69,7 @@ class DfFromMseed:
         templateDf: dataframe with count values in single column titled 'count'
         """
         df = pd.DataFrame(columns=['timestamp', 'count'])
-        df['count'] = self.getCountSeries()
-        df['timestamp'] = self.getTimestampSeries()
+        df['timestamp'], df['count'] = self.getSeparateSeries()
         return df
 
     def getTruncateIndexes(self, df):
@@ -127,5 +103,5 @@ testTimestamp = '2019-09-26T133930'
 
 df = DfFromMseed(testMseed, testTimestamp)
 
-seconds = time.time() - start_time
+seconds = time.time() - startTime
 print("--- {} seconds ---".format(seconds))

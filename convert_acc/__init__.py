@@ -223,24 +223,28 @@ def getResourcePath(relativePath):
 
 
 # get clean df from single text file
-class ProcessedFromTxtFile:
+class DfFromTxtFile:
     def __init__(self, txtFilePath):
         self.txtFilePath = txtFilePath
-        self.df = None
-        self.headerList = None
+        self.df = pd.DataFrame(columns=['timestamp', 'count'])
         self.sensorCode, self.sensorCodeWithChannel = getSensorCodeInfo(self.txtFilePath)
 
-        self.convertTxtToDf()
-        self.setHeaderList()
-        self.getDfWithTimestampedCounts()
+        self.headerList = self.getOriginalHeader()
+        self.rawDf = self.convertTxtToDf()
+        self.populateDf()
+
+    def getOriginalHeader(self):
+        """return header (first line of txt file)"""
+        tempDf = pd.read_csv(self.txtFilePath, nrows=0)
+        return [item.strip() for item in list(tempDf.columns.values)]
 
     def convertTxtToDf(self):
-        """convert given text file to pandas dataframe"""
-        self.df = pd.read_csv(self.txtFilePath, header=0)
-
-    def setHeaderList(self):
-        """set header list for object from dataframe columns"""
-        self.headerList = [item for item in list(self.df.columns.values)]
+        """
+        return pandas dataframe converted from text file with no processing
+        (input text data contains counts in six separate columns)
+        """
+        df = pd.read_csv(self.txtFilePath, header=0, sep='\t').reset_index()
+        return df
 
     def getTimestamp(self):
         """
@@ -250,63 +254,46 @@ class ProcessedFromTxtFile:
         timestamp = None
         for item in self.headerList:
             try:
-                timestamp = pd.Timestamp(item)
+                return pd.Timestamp(item)
             except ValueError:
                 pass
-        if timestamp:
-            return timestamp
-        else:
-            raise ValueError('Timestamp header not found in input text file.')
-
-    def getCountColumnHeader(self):
-        """
-        get column header that contains count values 
-        necessary values are not always under 'Counts' header
-        order of headers varies
-        return: string holding name of column holding count values
-        """
-        countHeader = None
-        for header in self.headerList:
-            firstVal = self.df[header][0]
-            logging.debug('{0}:{1}'.format(header, firstVal))
-            if firstVal is not None:
-                logging.debug(firstVal)
-                countHeader = header
-                logging.debug(countHeader)
-                return countHeader
 
     def getTimestampSeries(self):
         """get pandas series holding all necessary timestamps for given hour"""
         startTime = self.getTimestamp()
         # time delta between entries: 0.01 s
         timeDelta = pd.Timedelta('0 days 00:00:00.01000')
-        # time delta of entire file - 1 hour minus  0.01 s
-        fileTimeDelta = pd.Timedelta('0 days 00:59:59.990000')
-        endTime = startTime + fileTimeDelta
+        # time period covered by entire file after first entry - 1 hour minus 0.01 s
+        filePeriod = pd.Timedelta('0 days 00:59:59.990000')
+        endTime = startTime + filePeriod
         # create timestamp series
         timestampSeries = pd.Series(pd.date_range(start=startTime, end=endTime, freq=timeDelta))
         return timestampSeries
 
-    def getDfWithTimestampedCounts(self):
-        """arrange self.df to contain only timestamp and count columns"""
-        # add new columns to dataframe
-        self.df['count'] = self.df[self.getCountColumnHeader()]
+    def getCountSeries(self):
+        """
+        return pandas dataframe of integers representing raw count data
+        (combine input data from six separate columns into single series)
+        """
+        rowGenerator = self.rawDf.iterrows()
+        counts = []
+        for i in rowGenerator:
+            for x in range(6):
+                counts.append(i[1][x])
+        return pd.Series(counts)
+
+    def populateDf(self):
+        """add timestamp and count data to dataframe"""
         self.df['timestamp'] = self.getTimestampSeries()
-        # print('dtypes of clean df: {0}'.format(self.df.dtypes))
-        requiredColumns = ['timestamp', 'count']
-        extraneousColumns = [header for header in self.headerList if header not in requiredColumns]
-        for c in extraneousColumns:
-            self.df.drop(c, axis=1, inplace=True)
-        logging.info(self.df.head())
-
-
+        self.df['count'] = self.getCountSeries()
+        
 # class used to convert data (in single dataframe) from
 # count to acceleration, velocity, and displacement
 class Conversion:
     def __init__(self, df, sensorCode, sensorCodeWithChannel, eventTimestamp):
         """
         Initializer for Conversion class
-        df: pandas df of ProcessedFromTxtFile object
+        df: pandas df from DfFromTxtFile object
         sensorCode: string holding sensor code ex. 'B4F'
         sensorCodeWithChannel: string holding sensor code and axis ex. 'B4Fx'
         eventTimestamp: string holding event timestamp ex.'2020-01-13T163712'
@@ -766,16 +753,16 @@ class PrimaryUi(QMainWindow):
         """
         Convert all miniseed files in miniseed directory to ascii files
         """
-        binaryPath = os.path.join(self.miniseedDir, 'mseed2ascii')
-
         for f in self.miniseedFileList:
             mseedPath = os.path.join(self.miniseedDir, f)
             basename = f.rsplit(".m")[0]
             filename = basename + ".txt"
             outPath = os.path.join(self.workingDir, filename)
-            # os.chdir(self.miniseedDir)
-            # subprocess.run(["./mseed2ascii", f, "-o", outPath])
-            subprocess.run([binaryPath, mseedPath, "-o", outPath])
+            stream = read(mseedPath)
+            try:
+                stream.write(outPath, format='SLIST')
+            except Exception as e:
+                print('error converting miniseed to text file: {0}'.format(e))
 
     def createTextInputFields(self):
         """Create text input fields"""
@@ -928,9 +915,9 @@ class PrimaryUi(QMainWindow):
         return: conversion object made from dataframe from combined text files
         """
         txtFilePair = sorted([item[0] for item in txtFilePair])
-        p1 = ProcessedFromTxtFile(txtFilePair[0])
+        p1 = DfFromTxtFile(txtFilePair[0])
         df1 = p1.df
-        p2 = ProcessedFromTxtFile(txtFilePair[1])
+        p2 = DfFromTxtFile(txtFilePair[1])
         df2 = p2.df
         df = pd.concat([df1, df2])
         df.reset_index(drop=True, inplace=True)
@@ -941,7 +928,7 @@ class PrimaryUi(QMainWindow):
         txtFile: string holding name of text file produced from miniseed file
         return: conversion object made from dataframe produced from text file
         """
-        p = ProcessedFromTxtFile(txtFile)
+        p = DfFromTxtFile(txtFile)
         df = p.df
         return Conversion(df, p.sensorCode, p.sensorCodeWithChannel, self.eventTimestamp)
 
