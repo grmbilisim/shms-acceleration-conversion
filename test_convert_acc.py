@@ -60,29 +60,11 @@ def test_sortFiles(unorderedFileListAll, orderedFileListAll):
 
 # ----------unit tests for methods------------
 
-# unit tests for ProcessedFromTxtFile methods
-# using ProcessedFromTxtFile object from 'test_data/20190926100000.ALZ.001.B4Fx.txt'
-
-def test_setHeaderList(pObject):
-	assert pObject.headerList == ['TIMESERIES AT_ALZ__B4F_D',' 360000 samples', ' 100 sps', ' 2019-09-26T10:00:00.010000', ' SLIST',
-       ' INTEGER', ' Counts']
+# unit tests for DfFromTxtFile methods
+# using DfFromTxtFile object from 'test_data/20190926100000.ALZ.001.B4Fx.txt'
 
 
-def test_getTimestamp(pObject):
-	assert pObject.getTimestamp() == pd.Timestamp('2019-09-26 10:00:00.010000')
-
-
-def test_getCountColumnHeader(pObject):
-	""""assert that column containing count data has data at first index"""
-	assert pObject.df['count'][0] is not None
-
-
-def test_getTimestampSeries(pObject):
-	"""assert correct first and last values of series and correct interval between first two value"""
-	timestampSeries = pObject.getTimestampSeries()
-	assert timestampSeries[0] == pd.Timestamp('2019-09-26 10:00:00.010')
-	assert timestampSeries[len(timestampSeries) - 1] == pd.Timestamp('2019-09-26 11:00:00')
-	assert timestampSeries[1] - timestampSeries[0] == pd.Timedelta('0 days 00:00:00.01000')
+# Most methods removed when obspy replaced mseed2ascii - add new test here?
 
 
 # unit tests for Conversion methods
@@ -102,25 +84,6 @@ def test_convertCountToG(testInput, expected):
 	assert convert_acc.Conversion.convertCountToG(testInput) == expected
 '''
 
-
-def test_getTruncateIndexes(cObject):
-	"""assert that indexes used for truncating dataframe are correct"""
-	assert cObject.getTruncateIndexes() == (350999, 390999)
-
-
-def test_truncateDfFirstRow(cObject):
-	"""assert that first row of timestamp column of dataframe is correct"""
-	netIgnoredSamples = cObject.ignoredSamples - cObject.zeroPadLength
-	ignoredSeconds = netIgnoredSamples / 100
-	ignoredTimedelta = pd.Timedelta('{0} seconds'.format(ignoredSeconds))
-	assert cObject.df.iloc[0]['timestamp'] == pd.Timestamp('2019-09-26 10:58:30') + ignoredTimedelta
-
-
-def test_truncateDfLastLow(cObject):
-	"""assert that last row of timestamp column of dataframe is correct"""
-	assert cObject.df.iloc[-1]['timestamp'] == pd.Timestamp('2019-09-26 11:05:10')
-
-
 def test_setSensitivity(cObject):
 	assert cObject.setSensitivity('B4Fx') == 1.25
 	assert cObject.setSensitivity('FFN') == 1.25
@@ -138,18 +101,18 @@ def test_getZeroPaddedDf(cObject):
 	assert that dataframes returned by getZeroPaddedDf contain zero pads of 
 	correct lengths 
 	"""
-	paddedDf = cObject.getZeroPaddedDf(cObject.inputDf, ['timestamp', 'count'])
+	paddedDf = cObject.getZeroPaddedDf(cObject.df, ['timestamp', 'g'])
 	zeros = np.zeros(shape=(cObject.zeroPadLength))
 	zeroPad = pd.Series(zeros)
 	nullList = [None] * cObject.zeroPadLength
 	timestampHead = list(paddedDf.iloc[:cObject.zeroPadLength]['timestamp'])
 	timestampTail = list(paddedDf.iloc[-cObject.zeroPadLength:]['timestamp'])
-	countHead = list(paddedDf.iloc[:cObject.zeroPadLength]['count'])
-	countTail = list(paddedDf.iloc[-cObject.zeroPadLength:]['count'])
+	gHead = list(paddedDf.iloc[:cObject.zeroPadLength]['g'])
+	gTail = list(paddedDf.iloc[-cObject.zeroPadLength:]['g'])
 	assert timestampHead == nullList
 	assert timestampTail == nullList
-	assert countHead == list(zeroPad)
-	assert countTail == list(zeroPad)
+	assert gHead == list(zeroPad)
+	assert gTail == list(zeroPad)
 
 
 def test_convertGToMetric(cObject):
@@ -180,11 +143,11 @@ def test_removeIgnoredSamplesZeroPad(cObject):
 	and zero pad from tail
 	"""
 	removedSampleCount = cObject.ignoredSamples - cObject.zeroPadLength
-	assert len(cObject.df) == 40001 - removedSampleCount
+	assert len(cObject.df) == 9501 - removedSampleCount
 
 
 def test_getStats(cObject):
-	assert cObject.getStats('highpassed_displacement_cm') == [3253, pytest.approx(-0.16880180775299947), -0.1688]
+	assert cObject.getStats('highpassed_displacement_cm')[1:] == [pytest.approx(-0.16880180775299947), -0.1688]
 
 '''
 def test_isEventTimestampValid(iObject):

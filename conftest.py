@@ -134,24 +134,26 @@ def orderedFileListAll():
 
 
 # fixtures for testing methods
+
+# may or may not need pObject anymore
+'''
 @pytest.fixture(scope='module')
 def pObject():
 	"""return instance of ProcessedFromTxtFile class"""
 	p = convert_acc.ProcessedFromTxtFile(r'test_data/20190926100000.ALZ.001.B4Fx.txt')
 	return p
+'''
 
 
 @pytest.fixture(scope='module')
 def cObject():
-	"""return instance of Conversion class: B4Fx for event starting at 2019-09-26T135930 local time"""
-	csv_file = r'test_data/processedFromTxtFile_20190926_B4Fx.csv'
-	raw_df = pd.read_csv(csv_file, header=0)
-	df = raw_df[['count', 'timestamp']]
+	"""return instance of Conversion class: B4Fx for event starting at 2019-09-26T135930 Turkish local time"""
+	csv_file = r'test_data/processedFromTxtFile_20190926_10_B4Fx.csv'
+	df = pd.read_csv(csv_file, header=0)
+	# df = raw_df[['count', 'timestamp']]
 	# cast timestamp values to pandas Timestamps to match those of actual df
-	df['timestamp'] = df['timestamp'].apply(lambda x: pd.Timestamp(x))
+	# df['timestamp'] = df['timestamp'].apply(lambda x: pd.Timestamp(x))
 
 	c = convert_acc.Conversion(df, 'B4F', 'B4Fx', '2019-09-26T135930')
-	print(c.df.head())
-	print(c.df.tail())
 	return c
 

@@ -35,6 +35,7 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
 from obspy import read
+from obspy import UTCDateTime
 # for conversion of tables to pdf: use weasyprint on Linux, xhtml2pdf on Windows and MacOS
 try:
     from weasyprint import HTML
@@ -56,16 +57,8 @@ logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s -
 """
 General Notes:
 use camelCase throughout as Qt uses it
-remove unused imports leftover from template app
 
-moved functionality from Controller class to PrimaryUi class
-
-can handle either 24 or 48 input miniseed files
-
-creating report similar to pages 3-5 of third-party report
 """
-
-# move all helper functions into a public class?
 
 SENSOR_CODES = ('N39', 'S39', 'N24', 'S24', 'N12', 'S12', 'B4F', 'FF')
 
@@ -226,66 +219,36 @@ def getResourcePath(relativePath):
 class DfFromTxtFile:
     def __init__(self, txtFilePath):
         self.txtFilePath = txtFilePath
-        self.df = pd.DataFrame(columns=['timestamp', 'count'])
+        # sensor code info not used within DfFromTxtFile but necessary for Conversion instances
         self.sensorCode, self.sensorCodeWithChannel = getSensorCodeInfo(self.txtFilePath)
 
-        self.headerList = self.getOriginalHeader()
         self.rawDf = self.convertTxtToDf()
-        self.populateDf()
-
-    def getOriginalHeader(self):
-        """return header (first line of txt file)"""
-        tempDf = pd.read_csv(self.txtFilePath, nrows=0)
-        return [item.strip() for item in list(tempDf.columns.values)]
+        self.df = self.getCleanDf(self.rawDf)
 
     def convertTxtToDf(self):
         """
         return pandas dataframe converted from text file with no processing
-        (input text data contains counts in six separate columns)
+        (input text data contains timestamp and count data in a single column separated by spaces)
         """
-        df = pd.read_csv(self.txtFilePath, header=0, sep='\t').reset_index()
+        df = pd.read_csv(self.txtFilePath, header=0)
         return df
 
-    def getTimestamp(self):
+    def getCleanDf(self, df):
         """
-        get pandas timestamp from among column headers
-        return: pandas Timestamp object
+        return dataframe holding only timestamp and count values as separate columns
+        df: raw df containing timestamp and count data in first column separated by spaces
+        return: df holding only timestamp and count values as separate columns
         """
-        timestamp = None
-        for item in self.headerList:
-            try:
-                return pd.Timestamp(item)
-            except ValueError:
-                pass
+        singleColumnDf = df.iloc[:, [0]]
+        # get column name of first column
+        columnName = singleColumnDf.columns[0]
+        timestampSeries, countSeries = singleColumnDf[columnName].str.split(' ', 1).str
+        #timestampSeries = timestampSeries.rename('timestamp')
+        #countSeries = countSeries.rename('count')
+        # may or may not help to convert timestamps from string to pd.Timestamp
+        cleanDf = pd.DataFrame({'timestamp': timestampSeries, 'count': countSeries.astype('int32')})
+        return cleanDf
 
-    def getTimestampSeries(self):
-        """get pandas series holding all necessary timestamps for given hour"""
-        startTime = self.getTimestamp()
-        # time delta between entries: 0.01 s
-        timeDelta = pd.Timedelta('0 days 00:00:00.01000')
-        # time period covered by entire file after first entry - 1 hour minus 0.01 s
-        filePeriod = pd.Timedelta('0 days 00:59:59.990000')
-        endTime = startTime + filePeriod
-        # create timestamp series
-        timestampSeries = pd.Series(pd.date_range(start=startTime, end=endTime, freq=timeDelta))
-        return timestampSeries
-
-    def getCountSeries(self):
-        """
-        return pandas dataframe of integers representing raw count data
-        (combine input data from six separate columns into single series)
-        """
-        rowGenerator = self.rawDf.iterrows()
-        counts = []
-        for i in rowGenerator:
-            for x in range(6):
-                counts.append(i[1][x])
-        return pd.Series(counts)
-
-    def populateDf(self):
-        """add timestamp and count data to dataframe"""
-        self.df['timestamp'] = self.getTimestampSeries()
-        self.df['count'] = self.getCountSeries()
         
 # class used to convert data (in single dataframe) from
 # count to acceleration, velocity, and displacement
@@ -298,7 +261,7 @@ class Conversion:
         sensorCodeWithChannel: string holding sensor code and axis ex. 'B4Fx'
         eventTimestamp: string holding event timestamp ex.'2020-01-13T163712'
         """
-        self.inputDf = df
+        self.df = df
         self.sensorCode = sensorCode
         self.sensorCodeWithChannel = sensorCodeWithChannel
         self.floor = getFloor(self.sensorCode)
@@ -332,9 +295,6 @@ class Conversion:
 
         # manipulate input dataframe
 
-        self.truncateStartIndex, self.truncateEndIndex = self.getTruncateIndexes()
-        # would prefer not to assign truncated df to self.df as now dealing with copy of slice
-        self.df = self.inputDf.truncate(self.truncateStartIndex, self.truncateEndIndex, copy=False)
         self.df['g'] = self.df['count'].apply(lambda x: self.convertCountToG(x))
         self.df = self.getZeroPaddedDf(self.df, ['timestamp', 'g'])
         # add 'offset_g' column by detrending 'g'
@@ -374,20 +334,6 @@ class Conversion:
         print(self.df.head())
         print('tail')
         print(self.df.tail())
-
-    def getTruncateIndexes(self):
-        """return tuple holding start and end indexes to be used to truncate dataframe"""
-        # convert string timestamp to pandas Timestamp instance
-        eventTimestamp = pd.Timestamp(self.eventTimestamp)
-        # convert timestamp from local Turkish time to UTC
-        eventTimestamp = eventTimestamp - pd.Timedelta('3 hours')
-        startTime = eventTimestamp - pd.Timedelta('1 minute')
-        endTime = startTime + pd.Timedelta('400 seconds')
-        # print('type of startTime: {0}'.format(type(startTime)))
-        # print('dtypes of inputDf: {0}'.format(self.inputDf.dtypes))
-        startIndex = self.inputDf.index[self.inputDf['timestamp'] == startTime][0]
-        endIndex = self.inputDf.index[self.inputDf['timestamp'] == endTime][0]
-        return startIndex, endIndex
 
     def setSensitivity(self, sensorCodeWithChannel):
         """
@@ -593,7 +539,7 @@ class Conversion:
 
 # subclass of QMainWindow to set up the portion of GUI
 # to take information from user and serve as controller of program
-class PrimaryUi(QMainWindow):
+class PrimaryUI(QMainWindow):
     """AccConvert's initial view for taking input from user."""
     def __init__(self):
         """View initializer."""
@@ -741,17 +687,32 @@ class PrimaryUi(QMainWindow):
         if not os.path.isdir(self.workingDir):
             os.mkdir(self.workingDir)
 
-    def copyMiniseedToAsciiBinary(self):
+    def timestampToUTC(self, eventTimestamp):
         """
-        Copy binary for mseed2ascii program to directory holding miniseed files.
-        (Edit this before building Windows binary for convert_acc)
+        convert event timestamp from local Turkish time to UTC
+        (will need to be edited if Turkey re-institutes daylight savings time,
+        apparently DST is not expected for UTC at least through 2029)
+        eventTimestamp: string holding event timestamp in local Turkish time (entered by user)
+        return: UTCDateTime object holding timestamp in UTC
         """
-        binaryPath = getResourcePath('resources/mseed2ascii')
-        copy(binaryPath, self.miniseedDir)
+        eventTimestamp = UTCDateTime(eventTimestamp)
+        # subtract 3 hours from timestamp in local Turkish time (10800 seconds)
+        eventTimestampUTC = eventTimestamp - 10800
+        return eventTimestampUTC
+
+    def getWindowBounds(self, eventTimestamp):
+        """
+        return start and end timestamps to be used as window boundaries
+        eventTimestamp: UTCDateTime object holding timestamp in UTC
+        return: tuple of UTCDateTime objects holding start and end times in UTC
+        """
+        startTime = eventTimestamp - 60
+        endTime = startTime + 400
+        return (startTime, endTime)
 
     def convertMiniseedToAscii(self):
         """
-        Convert all miniseed files in miniseed directory to ascii files
+        Convert all miniseed files in miniseed directory to ascii files (TSPAIR format)
         """
         for f in self.miniseedFileList:
             mseedPath = os.path.join(self.miniseedDir, f)
@@ -759,8 +720,10 @@ class PrimaryUi(QMainWindow):
             filename = basename + ".txt"
             outPath = os.path.join(self.workingDir, filename)
             stream = read(mseedPath)
+            startTime, endTime = self.getWindowBounds(self.timestampToUTC(self.eventTimestamp))
+            trimmedStream = stream.trim(startTime, endTime)
             try:
-                stream.write(outPath, format='SLIST')
+                trimmedStream.write(outPath, format='TSPAIR')
             except Exception as e:
                 print('error converting miniseed to text file: {0}'.format(e))
 
@@ -1034,7 +997,6 @@ class PrimaryUi(QMainWindow):
             return
         self.getReadableTimestamp()
         self.setWorkingDir()
-        self.copyMiniseedToAsciiBinary()
         self.convertMiniseedToAscii()
         self.setTxtFileInfo()
         self.pairDeviceTxtFiles()
@@ -1208,7 +1170,7 @@ def main():
     convertacc = QApplication(sys.argv)
 
     # Show the application's GUI
-    view = PrimaryUi()
+    view = PrimaryUI()
     view.show()
 
     # Execute the program's main loop
