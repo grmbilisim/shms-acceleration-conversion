@@ -216,10 +216,10 @@ def getResourcePath(relativePath):
 
 
 # get clean df from single text file
-class DfFromTxtFile:
+class ProcessedFromTxtFile:
     def __init__(self, txtFilePath):
         self.txtFilePath = txtFilePath
-        # sensor code info not used within DfFromTxtFile but necessary for Conversion instances
+        # sensor code info not used within ProcessedFromTxtFile but necessary for Conversion instances
         self.sensorCode, self.sensorCodeWithChannel = getSensorCodeInfo(self.txtFilePath)
 
         self.rawDf = self.convertTxtToDf()
@@ -236,16 +236,13 @@ class DfFromTxtFile:
     def getCleanDf(self, df):
         """
         return dataframe holding only timestamp and count values as separate columns
-        df: raw df containing timestamp and count data in first column separated by spaces
+        df: raw df containing both timestamp and count data in first column (space-delimited)
         return: df holding only timestamp and count values as separate columns
         """
         singleColumnDf = df.iloc[:, [0]]
         # get column name of first column
         columnName = singleColumnDf.columns[0]
         timestampSeries, countSeries = singleColumnDf[columnName].str.split(' ', 1).str
-        #timestampSeries = timestampSeries.rename('timestamp')
-        #countSeries = countSeries.rename('count')
-        # may or may not help to convert timestamps from string to pd.Timestamp
         cleanDf = pd.DataFrame({'timestamp': timestampSeries, 'count': countSeries.astype('int32')})
         return cleanDf
 
@@ -256,7 +253,7 @@ class Conversion:
     def __init__(self, df, sensorCode, sensorCodeWithChannel, eventTimestamp):
         """
         Initializer for Conversion class
-        df: pandas df from DfFromTxtFile object
+        df: pandas df from ProcessedFromTxtFile object
         sensorCode: string holding sensor code ex. 'B4F'
         sensorCodeWithChannel: string holding sensor code and axis ex. 'B4Fx'
         eventTimestamp: string holding event timestamp ex.'2020-01-13T163712'
@@ -305,7 +302,7 @@ class Conversion:
         self.butterBandpassFilter('acc_ms2', 'bandpassed_ms2')
         self.df['velocity_ms'] = self.integrateSeries(self.df['bandpassed_ms2'])
 
-        self.removeIgnoredSamplesZeroPad()
+        self.removeExtraneousSamples()
         self.df['detrended_velocity_ms'] = detrend(self.df['velocity_ms'], type='constant')
         self.df['detrended_velocity_cms'] = self.df['detrended_velocity_ms'].apply(lambda x: self.convertMToCm(x))
         # self.convertMToCm('detrended_velocity_ms', 'detrended_velocity_cms')
@@ -321,12 +318,14 @@ class Conversion:
         self.velStats = self.getStats('detrended_velocity_cms')
         self.dispStats = self.getStats('highpassed_displacement_cm')
 
+        print('final df description: {0}'.format(self.printDfDesc()))
+
     def logHeadTail(self):
         """print head and tail of self.df to console"""
         logging.debug(self.df.head())
         logging.debug(self.df.tail())
 
-    def printHeadTail(self):
+    def printDfDesc(self):
         """print head and tail of self.df to console"""
         print('columns')
         print(self.df.columns)
@@ -334,6 +333,7 @@ class Conversion:
         print(self.df.head())
         print('tail')
         print(self.df.tail())
+        print('length of df: {0}'.format(len(self.df)))
 
     def setSensitivity(self, sensorCodeWithChannel):
         """
@@ -429,11 +429,13 @@ class Conversion:
             integratedList.append(integrated)
         return pd.Series(integratedList)
 
-    def removeIgnoredSamplesZeroPad(self):
+    def removeExtraneousSamples(self):
         """truncate self.df by removing ignored samples and zero pad at tail"""
         endIndex = 40000 + self.zeroPadLength
         self.df = self.df.truncate(self.ignoredSamples, endIndex, copy=False)
         self.df.reset_index(drop=True, inplace=True)
+        logging.debug('df description after extraneous samples removed:')
+        # self.printDfDesc()
 
     def butterHighpassFilter(self, inputColumn, outputColumn):
         """
@@ -478,9 +480,9 @@ class Conversion:
 
         peakInfo.append(round(peakInfo[1], 4))
 
-        logging.info('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
+        logging.debug('stats for {0}:{1}\n'.format(self.sensorCodeWithChannel, columnName))
         stats = 'min: {0}\nmax: {1}\nmean: {2}\n'.format(minVal, maxVal, meanVal)
-        logging.info(stats)
+        logging.debug(stats)
         return peakInfo
 
     def plotResultsGraph(self, canvasObject, column, titleSuffix, yLimit):
@@ -878,9 +880,9 @@ class PrimaryUI(QMainWindow):
         return: conversion object made from dataframe from combined text files
         """
         txtFilePair = sorted([item[0] for item in txtFilePair])
-        p1 = DfFromTxtFile(txtFilePair[0])
+        p1 = ProcessedFromTxtFile(txtFilePair[0])
         df1 = p1.df
-        p2 = DfFromTxtFile(txtFilePair[1])
+        p2 = ProcessedFromTxtFile(txtFilePair[1])
         df2 = p2.df
         df = pd.concat([df1, df2])
         df.reset_index(drop=True, inplace=True)
@@ -891,7 +893,7 @@ class PrimaryUI(QMainWindow):
         txtFile: string holding name of text file produced from miniseed file
         return: conversion object made from dataframe produced from text file
         """
-        p = DfFromTxtFile(txtFile)
+        p = ProcessedFromTxtFile(txtFile)
         df = p.df
         return Conversion(df, p.sensorCode, p.sensorCodeWithChannel, self.eventTimestamp)
 

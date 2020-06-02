@@ -1,5 +1,5 @@
 import convert_acc
-import unittest
+# import unittest
 import pytest
 
 import pandas as pd
@@ -66,6 +66,12 @@ def test_sortFiles(unorderedFileListAll, orderedFileListAll):
 
 # Most methods removed when obspy replaced mseed2ascii - add new test here?
 
+def test_getCleanDf(pObject):
+	"""assert that df from getCleanDf() has only 'timestamp' and 'count' columns"""
+	columns = pObject.df.columns
+	assert len(columns) == 2
+	assert columns[0] == 'timestamp' or columns[0] == 'count'
+	assert columns[1] == 'timestamp' or columns[1] == 'count'
 
 # unit tests for Conversion methods
 # using Conversion object with B4Fx for event starting at 2019-09-26T135930 local time
@@ -137,16 +143,18 @@ def test_integrateSeries(cObject):
 	# pd.testing.assert_series_equal(outputSeries, expectedSeries, check_exact=False, check_less_precise=6)
 
 
-def test_removeIgnoredSamplesZeroPad(cObject):
+def test_removeExtraneousSamples(cObject):
 	"""
 	assert that length of df is correct after removing ignored samples from head
 	and zero pad from tail
 	"""
 	removedSampleCount = cObject.ignoredSamples - cObject.zeroPadLength
-	assert len(cObject.df) == 9501 - removedSampleCount
+	assert len(cObject.df) == 40001 - removedSampleCount
 
 
 def test_getStats(cObject):
+	print('length of Conversion object df: {0}'.format(len(cObject.df)))
+	print(cObject.getStats('highpassed_displacement_cm'))
 	assert cObject.getStats('highpassed_displacement_cm')[1:] == [pytest.approx(-0.16880180775299947), -0.1688]
 
 '''
