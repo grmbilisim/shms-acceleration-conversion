@@ -22,6 +22,8 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QButtonGroup
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtWidgets import QScrollArea
+
+from PyQt5 import QtWebEngineWidgets
 # from PyQt5.QtWidgets import QDialog
 # from PyQt5.QtWidgets import QProgressBar
 from PyQt5.QtCore import QRegExp
@@ -36,6 +38,15 @@ import matplotlib.pyplot as plt
 
 from obspy import read
 from obspy import UTCDateTime
+
+from reportlab.platypus import SimpleDocTemplate
+from reportlab.platypus import Image
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import Table
+from reportlab.platypus import TableStyle
+from reportlab.platypus.flowables import HRFlowable
+
+
 # for conversion of tables to pdf: use weasyprint on Linux, xhtml2pdf on Windows and MacOS
 try:
     from weasyprint import HTML
@@ -200,6 +211,13 @@ def sortFiles(inputFileList):
         return firstFileList + secondFileList
 
 
+def getReadableTimestamp(eventTimestamp):
+    """return string holding readable version of timestamp"""
+    eventTimestamp = pd.Timestamp(eventTimestamp)
+    eventTimestampReadable = eventTimestamp.strftime('%m/%d/%y %H:%M:%S')
+    return eventTimestampReadable
+
+
 def getResourcePath(relativePath):
     """ 
     Get absolute path to resource, works for dev and for PyInstaller 
@@ -213,6 +231,54 @@ def getResourcePath(relativePath):
         basePath = os.path.abspath("./convert_acc")
 
     return os.path.join(basePath, relativePath)
+
+
+def getReportHeader(eventTimestampReadable):
+    """
+    return elements of report header
+    eventTimestampReadable: string holding readable event timestamp
+    return: list of header elements
+    """
+    clientImagePath = getResourcePath('resources/placeholder.png')
+    reportTextImagePath = getResourcePath('resources/report_image.png')
+
+    clientImage = Image(clientImagePath, 105, 40)
+    clientImage.hAlign = 'LEFT'
+
+    reportTextImage = Image(reportTextImagePath, 74, 12)
+    reportTextImage.hAlign = 'RIGHT'
+
+    line1 = [[clientImage,'','','','','',reportTextImage],['','','','','','','automatic impact assessment due to building movement']]
+    line2 = [['EVENT:', eventTimestampReadable,'','','','SITE:','Istanbul']]
+
+    table1 = Table(line1, colWidths=[84, 84], rowHeights=20)
+    table2 = Table(line2, colWidths=[82, 82], rowHeights=20)
+
+    style1 = TableStyle([
+    ('ALIGN', (6, 0), (6, 0), 'DECIMAL'),
+    ('FONTSIZE', (0, 0), (6, 0), 20),
+    ('FONTNAME', (0, 0), (6, 0), 'Courier-Bold'),
+    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+    ('ALIGN', (6, 1), (6, -1), 'DECIMAL'),
+    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    (('TEXTCOLOR', (6, 1), (6, -1), "#949494"))
+    ])
+
+    style2 = TableStyle([
+    ('ALIGN', (6, 0), (6, 0), 'DECIMAL'),
+    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+    ('ALIGN', (6, 0), (6, -1), 'DECIMAL'),
+    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ('TEXTCOLOR', (1, 0), (1, 0), "#0000FF"),
+    ('TEXTCOLOR', (-1, -1), (-1, -1), "#0000FF"),
+    ])
+
+    table1.setStyle(style1)
+    table2.setStyle(style2)
+
+    flowable = HRFlowable(width='100%', thickness=0.2, color="#000000")
+
+    return [table1, flowable, table2]
 
 
 # get clean df from single text file
@@ -317,8 +383,6 @@ class Conversion:
         self.accBandpassedStats = self.getStats('bandpassed_g')
         self.velStats = self.getStats('detrended_velocity_cms')
         self.dispStats = self.getStats('highpassed_displacement_cm')
-
-        print('final df description: {0}'.format(self.printDfDesc()))
 
     def logHeadTail(self):
         """print head and tail of self.df to console"""
@@ -560,7 +624,7 @@ class PrimaryUI(QMainWindow):
         self.pairedTxtFileList = []
         self.progress = QMessageBox(self)
 
-        self.statsTable = StatsTable()
+        self.statsTable = StatsTable(self.eventTimestampReadable)
         self.offsetGResultsCanvas = ResultsCanvas('Acceleration (g)')
         self.bandpassedGResultsCanvas = ResultsCanvas('Bandpassed Acceleration (g)')
         self.velResultsCanvas = ResultsCanvas('Velocity (cm/s)')
@@ -674,10 +738,6 @@ class PrimaryUI(QMainWindow):
             return False
         else:
             return True
-
-    def getReadableTimestamp(self):
-        eventTimestamp = pd.Timestamp(self.eventTimestamp)
-        self.eventTimestampReadable = eventTimestamp.strftime('%m/%d/%y %H:%M:%S')
 
     def setWorkingDir(self):
         """
@@ -990,6 +1050,7 @@ class PrimaryUI(QMainWindow):
 
     def processUserInput(self):
         self.setEventTimestamp()
+        self.eventTimestampReadable = getReadableTimestamp(self.eventTimestamp)
         self.setMiniseedDir()
         self.setWorkingBaseDir()
         self.setMiniseedFileInfo()
@@ -997,7 +1058,6 @@ class PrimaryUI(QMainWindow):
             return
         if not self.isWorkingDirWritable():
             return
-        self.getReadableTimestamp()
         self.setWorkingDir()
         self.convertMiniseedToAscii()
         self.setTxtFileInfo()
@@ -1018,9 +1078,11 @@ class PrimaryUI(QMainWindow):
 # table holding peak values for acceleration, velocity, and displacement for each
 # channel of each device (modeled after third-party report)
 class StatsTable:
-    def __init__(self):
-        self.columnHeaders = ['Ch', 'ID', 'Floor', 'Axis', 'Offset Acc (g)', 'Bandpassed Acc (g)', 'Vel (cm/s)', 'Disp (cm)']
+    def __init__(self, eventTimestampReadable):
+        self.eventTimestampReadable = eventTimestampReadable
+        self.columnHeaders = ['Ch', 'ID', 'Floor', 'Axis', 'Offset Acc (g)', 'Acc (g)', 'Vel (cm/s)', 'Disp (cm)']
         self.df = pd.DataFrame(columns=self.columnHeaders)
+
         self.populateStaticColumns()
 
     def populateStaticColumns(self):
@@ -1058,19 +1120,74 @@ class StatsTable:
         workingDir: string holding path to working directory (where pdf will be created)
         columns: string holding 'all' for all columns or 'acceleration' for bandpassed acceleration only
         """
+        elements = []
+
         if columns == 'all':
-            html = self.df.to_html(index=False, border=0)
-            htmlFilename = 'stats_table_all.html'
+            tableContent = self.df.to_numpy().tolist()
+            tableContent.insert(0, self.columnHeaders)
             pdfFilename = 'stats_table_all.pdf'
         elif columns == 'acceleration':
-            headers = ['Ch', 'ID', 'Floor', 'Axis', 'Bandpassed Acc (g)']
-            html = self.df[headers].to_html(index=False, border=0)
-            htmlFilename = 'stats_table_acc.html'
+            headers = ['Ch', 'ID', 'Floor', 'Axis', 'Acc (g)']
+            tableContent = self.df[headers].to_numpy().tolist()
+            tableContent.insert(0, headers)
             pdfFilename = 'stats_table_acc.pdf'
-
-        tableTemplate = getResourcePath('resources/stats_table_template.html')
-        tableStyle = getResourcePath('resources/stats_table_style.css')
         
+        # tableContent.insert(0, printedHeaders)
+
+        tableLineLength = len(tableContent[0])
+        tableLineComment = 'Unconfirmed preliminary results'
+        tableLineList = [''] * (tableLineLength - 1)
+        tableLineList.insert(0, tableLineComment)
+        tableContent.insert(0, tableLineList)
+
+        pdfFile = os.path.join(workingDir, pdfFilename)
+
+        pdf = SimpleDocTemplate(
+        pdfFile,
+        pagesize=letter,
+        rightMargin = 10,
+        leftMargin = 28,
+        topMargin = 5,
+        bottomMargin = 5
+        )
+
+        # testing reportlab for table
+        table = Table(tableContent, colWidths=[80, 80], rowHeights=24)
+        primaryStyle = TableStyle([
+            ('BACKGROUND', (0, 1), (6, 1), "#E3E3E3"),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('TEXTCOLOR', (0, 0), (-1, 0), "#000000"),
+            ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
+            ('FONTNAME', (0, 1), (-1, 1), 'Times-Bold'),
+            ('FONTSIZE', (0, 1), (-1, 0), 10),
+            ])
+
+        table.setStyle(primaryStyle)
+
+        numRows = len(tableContent)
+        for i in range(1, numRows):
+            if i >= 2:
+                if i % 2 == 0:
+                    color = "#FFFFFF"
+                else:
+                    color = "#F0F0F0"
+                lineStyle = TableStyle([('BACKGROUND', (0, i), (-1, i), color)])
+                table.setStyle(lineStyle)
+
+        boxStyle = TableStyle([('BOX', (0,0), (-1,-1), 0.25, "#000000")])
+        table.setStyle(boxStyle)
+
+        headerElements = getReportHeader(self.eventTimestampReadable)
+        for element in headerElements:
+            elements.append(element)
+        elements.append(table)
+
+        pdf.build(elements)
+
+        '''
+
         # replace blank lines in table template with table content
         with open(tableTemplate, 'r') as inFile:
             tableText = inFile.read().replace('insert table', html)
@@ -1080,9 +1197,30 @@ class StatsTable:
         with open(htmlTable, 'w+') as resultTable:
             resultTable.write(tableText)
 
-        pdfFile = os.path.join(workingDir, pdfFilename)
+        # testing html to pdf with PyQt5
 
-        # WeasyPrint will be installed on Linux, not Windows, maybe MacOS
+        loader = QtWebEngineWidgets.QWebEngineView()
+        loader.setZoomFactor(1)
+        loader.page().pdfPrintingFinished.connect(
+            lambda *args: print('finished:', args))
+        #with open(resultTable, 'r') as htmlResults:
+        #     content = htmlResults.read()
+        loader.setHtml(tableText)
+        print('setHtml() ran')
+        #loader.page().printToPdf(pdfFile)
+
+        def emitPdf(finished):
+            print('value of finished var: {0}'.format(finished))
+            print('emitPdf() entered')
+            loader.show()
+            loader.page().printToPdf(pdfFile)
+            print('emitPdf() was run')
+
+        loader.loadFinished.connect(emitPdf)
+        print('load finished')
+
+        
+        # WeasyPrint will be installed on Linux, not Windows or MacOS
         try:
             # get WeasyPrint HTML object
             wpHtml = HTML(string=tableText)
@@ -1097,7 +1235,7 @@ class StatsTable:
 
             with open(pdfFile, 'w+b') as resultFile:
                 pisa.CreatePDF(tableString, resultFile, default_css=styleString)
-
+        '''
 
 # Comparison Figure objects were going to be used to display four plots but ...
 class ComparisonFigure(Figure):
