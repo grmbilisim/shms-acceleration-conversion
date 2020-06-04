@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import QButtonGroup
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtWidgets import QScrollArea
 
-from PyQt5 import QtWebEngineWidgets
+# from PyQt5 import QtWebEngineWidgets
 # from PyQt5.QtWidgets import QDialog
 # from PyQt5.QtWidgets import QProgressBar
 from PyQt5.QtCore import QRegExp
@@ -41,7 +41,7 @@ from obspy import UTCDateTime
 
 from reportlab.platypus import SimpleDocTemplate
 from reportlab.platypus import Image
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import A4
 from reportlab.platypus import Table
 from reportlab.platypus import TableStyle
 from reportlab.platypus.flowables import HRFlowable
@@ -248,26 +248,26 @@ def getReportHeader(eventTimestampReadable):
     reportTextImage = Image(reportTextImagePath, 74, 12)
     reportTextImage.hAlign = 'RIGHT'
 
-    line1 = [[clientImage,'','','','','',reportTextImage],['','','','','','','automatic impact assessment due to building movement']]
-    line2 = [['EVENT:', eventTimestampReadable,'','','','SITE:','Istanbul']]
+    line1 = [[clientImage,'','','','','','','',reportTextImage],['','','','','','','','','automatic impact assessment due to building movement']]
+    line2 = [['EVENT:', eventTimestampReadable,'','','','','','SITE:','Istanbul']]
 
     table1 = Table(line1, colWidths=[84, 84], rowHeights=20)
     table2 = Table(line2, colWidths=[82, 82], rowHeights=20)
 
     style1 = TableStyle([
-    ('ALIGN', (6, 0), (6, 0), 'DECIMAL'),
-    ('FONTSIZE', (0, 0), (6, 0), 20),
-    ('FONTNAME', (0, 0), (6, 0), 'Courier-Bold'),
+    ('ALIGN', (8, 0), (8, 0), 'DECIMAL'),
+    ('FONTSIZE', (0, 0), (8, 0), 20),
+    ('FONTNAME', (0, 0), (8, 0), 'Courier-Bold'),
     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-    ('ALIGN', (6, 1), (6, -1), 'DECIMAL'),
+    ('ALIGN', (8, 1), (8, -1), 'DECIMAL'),
     ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-    (('TEXTCOLOR', (6, 1), (6, -1), "#949494"))
+    (('TEXTCOLOR', (8, 1), (8, -1), "#949494"))
     ])
 
     style2 = TableStyle([
-    ('ALIGN', (6, 0), (6, 0), 'DECIMAL'),
+    ('ALIGN', (8, 0), (8, 0), 'DECIMAL'),
     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-    ('ALIGN', (6, 0), (6, -1), 'DECIMAL'),
+    ('ALIGN', (8, 0), (8, -1), 'DECIMAL'),
     ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ('TEXTCOLOR', (1, 0), (1, 0), "#0000FF"),
     ('TEXTCOLOR', (-1, -1), (-1, -1), "#0000FF"),
@@ -1144,7 +1144,7 @@ class StatsTable:
 
         pdf = SimpleDocTemplate(
         pdfFile,
-        pagesize=letter,
+        pagesize=A4,
         rightMargin = 10,
         leftMargin = 28,
         topMargin = 5,
@@ -1154,7 +1154,7 @@ class StatsTable:
         # testing reportlab for table
         table = Table(tableContent, colWidths=[80, 80], rowHeights=24)
         primaryStyle = TableStyle([
-            ('BACKGROUND', (0, 1), (6, 1), "#E3E3E3"),
+            ('BACKGROUND', (0, 1), (7, 1), "#E3E3E3"),
             ('ALIGN', (0, 0), (0, 0), 'LEFT'),
             ('TEXTCOLOR', (0, 0), (-1, 0), "#000000"),
             ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
@@ -1179,7 +1179,9 @@ class StatsTable:
         boxStyle = TableStyle([('BOX', (0,0), (-1,-1), 0.25, "#000000")])
         table.setStyle(boxStyle)
 
+        print('readable event timestamp: {0} and type: {1}'.format(self.eventTimestampReadable, type(self.eventTimestampReadable)))
         headerElements = getReportHeader(self.eventTimestampReadable)
+        
         for element in headerElements:
             elements.append(element)
         elements.append(table)
