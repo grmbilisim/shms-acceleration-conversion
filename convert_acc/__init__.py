@@ -1014,52 +1014,77 @@ class PrimaryUI(QMainWindow):
         self.submitBtn.setEnabled(False)
 
 
-class HTML2PDF(FPDF, HTMLMixin):
+class ReportTemplate(FPDF, HTMLMixin):
+
     def header(self):
-        """ header for pdfs created via fpdf"""
         # Logo
-        self.image(getResourcePath('resources/placeholder.png'), x=10, y=6, w=45)
+        self.image(getResourcePath('resources/placeholder.png'), x=7, y=6, w=45)
         # Arial bold 15
         self.set_font('Arial', 'B', 15)
         # Move to the right
         self.cell(120)
         # Title
         #self.cell(30, 10, 'Title', 1, 0, 'C')
+        self.cell(w=73, h=10, txt='SUMMARY REPORT', border=0, ln=1, align='R')
 
-        self.cell(w=60, h=10, txt='SUMMARY REPORT', border=0, ln=1, align='R')
-        self.set_font('Arial', '', 7)
+        self.set_font('Arial', '', 9)
         self.set_text_color(r=128, g=128, b=128)
-        self.cell(w=180, h=0, txt='assessment of impact due to building motion', border=0, ln=0, align='R')
-        self.ln(1)
-        self.line(5,25,205,25)
+        self.cell(w=193, h=0, txt='assessment of impact due to building motion', border=0, ln=1, align='R')
+        # self.ln(1)
+        self.line(8,23,202,23)
         self.ln(2)
 
         self.set_text_color(0,0,0)
         self.set_font('Arial', 'B', 8)
-        self.cell(w=10, h=10, txt='EVENT:', border=0, ln=0, align='L')
+        self.set_x(7)
+        self.cell(w=10, h=7, txt='EVENT:', border=0, ln=0, align='L')
         
         self.cell(w=1)
         self.set_text_color(0,0,255)
-        self.cell(w=25, h=10, txt='TIMESTAMP PLACEHOLDER', border=0, ln=0, align='L')
+        self.cell(w=25, h=7, txt='2019-09-26 10:00:00 UTC', border=0, ln=0, align='L')
 
-        self.cell(w=100)
+        self.cell(w=118)
         self.set_text_color(0,0,0)
-        self.cell(w=5, h=10, txt='SITE:', border=0, ln=0, align='L')
-        self.cell(w=1)
+        self.cell(w=20, h=7, txt='SITE:', border=0, ln=0, align='L')
+        self.cell(w=2)
         self.set_text_color(0,0,255)
-        self.cell(w=37, h=10, txt='some building, Istanbul', border=0, ln=0, align='R')
+        self.cell(w=20, h=7, txt='Some Building, Istanbul', border=0, ln=0, align='R')
 
         # Line break
         self.ln(2)
 
+        # draw box - can't be in __init__() - move elsewhere?
+        self.rect(x=8, y=28, w=194, h=252)
+
+        # why doesn't this draw?
+        self.ellipse(x=50, y=50, w=5, h=5, style='F')
+
+    # Page footer
     def footer(self):
-        """ footer for pdfs created via fpdf"""
         # Position at 1.5 cm from bottom
         self.set_y(-15)
+        self.set_x(8)
+
+        self.set_font('Arial', 'I', 5)
+        self.set_text_color(r=128, g=128, b=128)
+        # self.cell(8)
+        self.cell(w=180, h=0, txt='GRM shall have no liability or responsibility to any person or entity with respect to any liability, loss, or damage caused or alleged to be caused directly or indirectly by use of this report. Content is subject to limitations from process assumptions', border=0, ln=1, align='L')
+        self.cell(w=180, h=3, txt='and uncertainties.', border=0, ln=1, align='L')
+
+        self.set_text_color(0,0,0)
         # Arial italic 8
-        self.set_font('Arial', 'I', 8)
+        self.set_font('Arial', '', 6)
         # Page number
-        self.cell(0, 10, 'Page ' + str(self.page_no()) + '/{nb}', 0, 0, 'C')
+        self.cell(10, 10, 'page ' + str(self.page_no()) + ' of 5', 0, 0, 'L')
+
+        #self.set_font('Arial', 'B', 15)
+        self.cell(7, 7, '', border=0, ln=0, align='C')
+        self.set_font('Arial', '', 6)
+        self.cell(27, 10, 'created by AT-SHM v1.0 on', border=0, ln=0, align='L')
+        self.set_text_color(0,0,255)
+        self.cell(10, 10, time.strftime('%Y-%m-%d %H:%M:%S UTC+3', time.localtime()), border=0, ln=0, align='L')
+
+        self.image(getResourcePath('resources/two_logos2.png'), x=160, y=285, w=45)
 
 
 # table holding peak values for acceleration, velocity, and displacement for each
@@ -1137,7 +1162,7 @@ class StatsTable:
             html += row
 
         html += '</tbody></table>'
-        pdf = HTML2PDF()
+        pdf = ReportTemplate()
         pdf.add_page()
         pdf.write_html(html)
         pdf.output(pdfFile)
