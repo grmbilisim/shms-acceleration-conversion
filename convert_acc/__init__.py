@@ -7,10 +7,12 @@ import subprocess
 import time
 from shutil import copy
 import logging
+import json
 
 import pandas as pd
 from scipy.signal import butter, lfilter, detrend
 from fpdf import FPDF
+from fpdf import HTMLMixin
 from PyPDF2 import PdfFileMerger
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QMainWindow
@@ -38,21 +40,6 @@ import matplotlib.pyplot as plt
 
 from obspy import read
 from obspy import UTCDateTime
-
-from reportlab.platypus import SimpleDocTemplate
-from reportlab.platypus import Image
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import Table
-from reportlab.platypus import TableStyle
-from reportlab.platypus.flowables import HRFlowable
-
-
-# for conversion of tables to pdf: use weasyprint on Linux, xhtml2pdf on Windows and MacOS
-try:
-    from weasyprint import HTML
-except ImportError:
-    from xhtml2pdf import pisa
-
 
 __version__ = '0.1'
 __author__ = 'Nick LiBassi'
@@ -231,54 +218,6 @@ def getResourcePath(relativePath):
         basePath = os.path.abspath("./convert_acc")
 
     return os.path.join(basePath, relativePath)
-
-
-def getReportHeader(eventTimestampReadable):
-    """
-    return elements of report header
-    eventTimestampReadable: string holding readable event timestamp
-    return: list of header elements
-    """
-    clientImagePath = getResourcePath('resources/placeholder.png')
-    reportTextImagePath = getResourcePath('resources/report_image.png')
-
-    clientImage = Image(clientImagePath, 105, 40)
-    clientImage.hAlign = 'LEFT'
-
-    reportTextImage = Image(reportTextImagePath, 74, 12)
-    reportTextImage.hAlign = 'RIGHT'
-
-    line1 = [[clientImage,'','','','','','','',reportTextImage],['','','','','','','','','automatic impact assessment due to building movement']]
-    line2 = [['EVENT:', eventTimestampReadable,'','','','','','SITE:','Istanbul']]
-
-    table1 = Table(line1, colWidths=[84, 84], rowHeights=20)
-    table2 = Table(line2, colWidths=[82, 82], rowHeights=20)
-
-    style1 = TableStyle([
-    ('ALIGN', (8, 0), (8, 0), 'DECIMAL'),
-    ('FONTSIZE', (0, 0), (8, 0), 20),
-    ('FONTNAME', (0, 0), (8, 0), 'Courier-Bold'),
-    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-    ('ALIGN', (8, 1), (8, -1), 'DECIMAL'),
-    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-    (('TEXTCOLOR', (8, 1), (8, -1), "#949494"))
-    ])
-
-    style2 = TableStyle([
-    ('ALIGN', (8, 0), (8, 0), 'DECIMAL'),
-    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-    ('ALIGN', (8, 0), (8, -1), 'DECIMAL'),
-    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-    ('TEXTCOLOR', (1, 0), (1, 0), "#0000FF"),
-    ('TEXTCOLOR', (-1, -1), (-1, -1), "#0000FF"),
-    ])
-
-    table1.setStyle(style1)
-    table2.setStyle(style2)
-
-    flowable = HRFlowable(width='100%', thickness=0.2, color="#000000")
-
-    return [table1, flowable, table2]
 
 
 # get clean df from single text file
@@ -1075,6 +1014,54 @@ class PrimaryUI(QMainWindow):
         self.submitBtn.setEnabled(False)
 
 
+class HTML2PDF(FPDF, HTMLMixin):
+    def header(self):
+        """ header for pdfs created via fpdf"""
+        # Logo
+        self.image(getResourcePath('resources/placeholder.png'), x=10, y=6, w=45)
+        # Arial bold 15
+        self.set_font('Arial', 'B', 15)
+        # Move to the right
+        self.cell(120)
+        # Title
+        #self.cell(30, 10, 'Title', 1, 0, 'C')
+
+        self.cell(w=60, h=10, txt='SUMMARY REPORT', border=0, ln=1, align='R')
+        self.set_font('Arial', '', 7)
+        self.set_text_color(r=128, g=128, b=128)
+        self.cell(w=180, h=0, txt='assessment of impact due to building motion', border=0, ln=0, align='R')
+        self.ln(1)
+        self.line(5,25,205,25)
+        self.ln(2)
+
+        self.set_text_color(0,0,0)
+        self.set_font('Arial', 'B', 8)
+        self.cell(w=10, h=10, txt='EVENT:', border=0, ln=0, align='L')
+        
+        self.cell(w=1)
+        self.set_text_color(0,0,255)
+        self.cell(w=25, h=10, txt='TIMESTAMP PLACEHOLDER', border=0, ln=0, align='L')
+
+        self.cell(w=100)
+        self.set_text_color(0,0,0)
+        self.cell(w=5, h=10, txt='SITE:', border=0, ln=0, align='L')
+        self.cell(w=1)
+        self.set_text_color(0,0,255)
+        self.cell(w=37, h=10, txt='some building, Istanbul', border=0, ln=0, align='R')
+
+        # Line break
+        self.ln(2)
+
+    def footer(self):
+        """ footer for pdfs created via fpdf"""
+        # Position at 1.5 cm from bottom
+        self.set_y(-15)
+        # Arial italic 8
+        self.set_font('Arial', 'I', 8)
+        # Page number
+        self.cell(0, 10, 'Page ' + str(self.page_no()) + '/{nb}', 0, 0, 'C')
+
+
 # table holding peak values for acceleration, velocity, and displacement for each
 # channel of each device (modeled after third-party report)
 class StatsTable:
@@ -1120,124 +1107,41 @@ class StatsTable:
         workingDir: string holding path to working directory (where pdf will be created)
         columns: string holding 'all' for all columns or 'acceleration' for bandpassed acceleration only
         """
-        elements = []
-
         if columns == 'all':
-            tableContent = self.df.to_numpy().tolist()
-            tableContent.insert(0, self.columnHeaders)
+            headers = self.df.columns.values
+            jsonDf = self.df.to_json()
             pdfFilename = 'stats_table_all.pdf'
         elif columns == 'acceleration':
             headers = ['Ch', 'ID', 'Floor', 'Axis', 'Acc (g)']
-            tableContent = self.df[headers].to_numpy().tolist()
-            tableContent.insert(0, headers)
+            jsonDf = self.df[headers].to_json()
             pdfFilename = 'stats_table_acc.pdf'
-        
-        # tableContent.insert(0, printedHeaders)
-
-        tableLineLength = len(tableContent[0])
-        tableLineComment = 'Unconfirmed preliminary results'
-        tableLineList = [''] * (tableLineLength - 1)
-        tableLineList.insert(0, tableLineComment)
-        tableContent.insert(0, tableLineList)
 
         pdfFile = os.path.join(workingDir, pdfFilename)
 
-        pdf = SimpleDocTemplate(
-        pdfFile,
-        pagesize=A4,
-        rightMargin = 10,
-        leftMargin = 28,
-        topMargin = 5,
-        bottomMargin = 5
-        )
+        jsonDict = json.loads(jsonDf)
 
-        # testing reportlab for table
-        table = Table(tableContent, colWidths=[80, 80], rowHeights=24)
-        primaryStyle = TableStyle([
-            ('BACKGROUND', (0, 1), (7, 1), "#E3E3E3"),
-            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-            ('TEXTCOLOR', (0, 0), (-1, 0), "#000000"),
-            ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
-            ('FONTNAME', (0, 1), (-1, 1), 'Times-Bold'),
-            ('FONTSIZE', (0, 1), (-1, 0), 10),
-            ])
+        html = '<table align="center" width="100%" border="0"><thead><tr bgcolor = "#E3E3E3">'
+        for header in headers:
+            html += '<th width="15%" height="35">{0}</th>'.format(header)
+        html += '</thead><tbody>'
 
-        table.setStyle(primaryStyle)
+        for x in range(0, len(jsonDict[headers[0]])):
+            if x % 2 == 0:
+                bgcolor = "#FFFFFF"
+            else:
+                bgcolor = "#F0F0F0"
+            row = '<tr bgcolor ={0}>'.format(bgcolor)
+            for header in headers:
+                row += '<td align="center" height="35">{0}</td>'.format(jsonDict[header][str(x)])
+            row += '</tr>'
+            html += row
 
-        numRows = len(tableContent)
-        for i in range(1, numRows):
-            if i >= 2:
-                if i % 2 == 0:
-                    color = "#FFFFFF"
-                else:
-                    color = "#F0F0F0"
-                lineStyle = TableStyle([('BACKGROUND', (0, i), (-1, i), color)])
-                table.setStyle(lineStyle)
+        html += '</tbody></table>'
+        pdf = HTML2PDF()
+        pdf.add_page()
+        pdf.write_html(html)
+        pdf.output(pdfFile)
 
-        boxStyle = TableStyle([('BOX', (0,0), (-1,-1), 0.25, "#000000")])
-        table.setStyle(boxStyle)
-
-        print('readable event timestamp: {0} and type: {1}'.format(self.eventTimestampReadable, type(self.eventTimestampReadable)))
-        headerElements = getReportHeader(self.eventTimestampReadable)
-        
-        for element in headerElements:
-            elements.append(element)
-        elements.append(table)
-
-        pdf.build(elements)
-
-        '''
-
-        # replace blank lines in table template with table content
-        with open(tableTemplate, 'r') as inFile:
-            tableText = inFile.read().replace('insert table', html)
-
-        # create html version of stats table
-        htmlTable = os.path.join(workingDir, htmlFilename)
-        with open(htmlTable, 'w+') as resultTable:
-            resultTable.write(tableText)
-
-        # testing html to pdf with PyQt5
-
-        loader = QtWebEngineWidgets.QWebEngineView()
-        loader.setZoomFactor(1)
-        loader.page().pdfPrintingFinished.connect(
-            lambda *args: print('finished:', args))
-        #with open(resultTable, 'r') as htmlResults:
-        #     content = htmlResults.read()
-        loader.setHtml(tableText)
-        print('setHtml() ran')
-        #loader.page().printToPdf(pdfFile)
-
-        def emitPdf(finished):
-            print('value of finished var: {0}'.format(finished))
-            print('emitPdf() entered')
-            loader.show()
-            loader.page().printToPdf(pdfFile)
-            print('emitPdf() was run')
-
-        loader.loadFinished.connect(emitPdf)
-        print('load finished')
-
-        
-        # WeasyPrint will be installed on Linux, not Windows or MacOS
-        try:
-            # get WeasyPrint HTML object
-            wpHtml = HTML(string=tableText)
-            wpHtml.write_pdf(pdfFile)
-        except:
-            # read contents of html table and css style and assign to variables
-            with open(htmlTable, 'r') as resultTable:
-                tableString = resultTable.read()
-
-            with open(tableStyle, 'r') as style:
-                styleString = style.read()
-
-            with open(pdfFile, 'w+b') as resultFile:
-                pisa.CreatePDF(tableString, resultFile, default_css=styleString)
-        '''
 
 # Comparison Figure objects were going to be used to display four plots but ...
 class ComparisonFigure(Figure):

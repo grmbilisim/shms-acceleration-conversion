@@ -1,57 +1,24 @@
-altgraph==0.17
-attrs==19.3.0
-cairocffi==1.1.0; sys_platform == 'linux'
-CairoSVG==2.4.2; sys_platform == 'linux'
 certifi==2020.4.5.1
-cffi==1.14.0; sys_platform == 'linux'
 chardet==3.0.4
-coverage==5.1
-cssselect2==0.3.0; sys_platform == 'linux'
 cycler==0.10.0
 decorator==4.4.2
-defusedxml==0.6.0; sys_platform == 'linux'
-entrypoints==0.3
 fpdf==1.7.2
 future==0.18.2
-html5lib==1.0.1
 idna==2.9
-importlib-metadata==1.6.0
-kiwisolver==1.1.0
-lxml==4.5.0
-matplotlib==3.0.3
-mccabe==0.6.1
-more-itertools==8.2.0
-numpy==1.18.1
+kiwisolver==1.2.0
+lxml==4.5.1
+matplotlib==3.2.1
+numpy==1.18.5
 obspy==1.2.1
-packaging==20.3
-pandas==0.24.2
-pathlib2==2.3.5
-Pillow==7.0.0
-pluggy==0.13.1
-py==1.8.1
-pycodestyle==2.5.0
-pycparser==2.20; sys_platform == 'linux'
-pyflakes==2.1.1
-pyparsing==2.4.6
+pandas==1.0.4
+pyparsing==2.4.7
 PyPDF2==1.26.0
-Pyphen==0.9.5; sys_platform == 'linux'
-PyQt5==5.14.1
-PyQt5-sip==12.7.1
-pytest==5.4.1
-pytest-cov==2.8.1
+PyQt5==5.15.0
+PyQt5-sip==12.8.0
 python-dateutil==2.8.1
-pytz==2019.3
-reportlab==3.5.42; sys_platform != 'linux'
+pytz==2020.1
 requests==2.23.0
 scipy==1.4.1
-SQLAlchemy==1.3.16
-six==1.14.0
-tinycss2==1.0.2; sys_platform == 'linux'
+six==1.15.0
+SQLAlchemy==1.3.17
 urllib3==1.25.9
-wcwidth==0.1.9
-WeasyPrint==51; sys_platform == 'linux'
-webencodings==0.5.1
-xhtml2pdf==0.2.4; sys_platform != 'linux'
-zipp==1.2.0
-
-
