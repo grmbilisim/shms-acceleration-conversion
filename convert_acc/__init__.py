@@ -12,7 +12,7 @@ import json
 import pandas as pd
 from scipy.signal import butter, lfilter, detrend
 from fpdf import FPDF
-from fpdf import HTMLMixin
+#from fpdf import HTMLMixin
 from PyPDF2 import PdfFileMerger
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QMainWindow
@@ -37,6 +37,10 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+try:
+    import pdfkit
+except:
+    from xhtml2pdf import pisa
 
 from obspy import read
 from obspy import UTCDateTime
@@ -846,7 +850,7 @@ class PrimaryUI(QMainWindow):
         for item in plotArgs:
             canvas, columnName, titleSuffix, maxVal = item
             # add 15% of maxVal to maxVal to get range of plots along y-axis
-            yLimit = maxVal + maxVal * 0.15
+            yLimit = maxVal + maxVal * 0.5
             conversionObject.plotResultsGraph(canvas, columnName, titleSuffix, yLimit)
 
     def drawComparisonPlot(self, conversionObject):
@@ -855,7 +859,7 @@ class PrimaryUI(QMainWindow):
         """
         displacementMaxVal = self.statsColumnMaxValues[-1]
         # add 15% of maxVal to maxVal to get range of plots along y-axis
-        yLimit = displacementMaxVal + displacementMaxVal * 0.15
+        yLimit = displacementMaxVal + displacementMaxVal * 0.25
         if all(i in conversionObject.sensorCodeWithChannel for i in ['N', 'x']):
             conversionObject.plotComparisonGraph(self.NXcomparisonCanvas, yLimit)
         elif all(i in conversionObject.sensorCodeWithChannel for i in ['S', 'x']):
@@ -1014,6 +1018,8 @@ class PrimaryUI(QMainWindow):
         self.submitBtn.setEnabled(False)
 
 
+'''
+# used only for fpdf - remove later if fpdf not used at all
 class ReportTemplate(FPDF, HTMLMixin):
 
     def header(self):
@@ -1085,7 +1091,7 @@ class ReportTemplate(FPDF, HTMLMixin):
         self.cell(10, 10, time.strftime('%Y-%m-%d %H:%M:%S UTC+3', time.localtime()), border=0, ln=0, align='L')
 
         self.image(getResourcePath('resources/two_logos2.png'), x=160, y=285, w=45)
-
+'''
 
 # table holding peak values for acceleration, velocity, and displacement for each
 # channel of each device (modeled after third-party report)
@@ -1133,39 +1139,45 @@ class StatsTable:
         columns: string holding 'all' for all columns or 'acceleration' for bandpassed acceleration only
         """
         if columns == 'all':
-            headers = self.df.columns.values
-            jsonDf = self.df.to_json()
+            html = self.df.to_html(index=False, border=0)
+            htmlFilename = 'stats_table_all.html'
             pdfFilename = 'stats_table_all.pdf'
         elif columns == 'acceleration':
             headers = ['Ch', 'ID', 'Floor', 'Axis', 'Acc (g)']
-            jsonDf = self.df[headers].to_json()
+            html = self.df[headers].to_html(index=False, border=0)
+            htmlFilename = 'stats_table_acc.html'
             pdfFilename = 'stats_table_acc.pdf'
 
         pdfFile = os.path.join(workingDir, pdfFilename)
 
-        jsonDict = json.loads(jsonDf)
+        tableTemplate = getResourcePath('resources/stats_table_template.html')
 
-        html = '<table align="center" width="100%" border="0"><thead><tr bgcolor = "#E3E3E3">'
-        for header in headers:
-            html += '<th width="15%" height="35">{0}</th>'.format(header)
-        html += '</thead><tbody>'
+        with open(tableTemplate, 'r') as inFile:
+            tableText = inFile.read().replace('insert table', html)
 
-        for x in range(0, len(jsonDict[headers[0]])):
-            if x % 2 == 0:
-                bgcolor = "#FFFFFF"
-            else:
-                bgcolor = "#F0F0F0"
-            row = '<tr bgcolor ={0}>'.format(bgcolor)
-            for header in headers:
-                row += '<td align="center" height="35">{0}</td>'.format(jsonDict[header][str(x)])
-            row += '</tr>'
-            html += row
+        htmlFile = os.path.join(workingDir, htmlFilename)
+        with open(htmlFile, 'w') as outFile:
+            outFile.write(tableText)
 
-        html += '</tbody></table>'
-        pdf = ReportTemplate()
-        pdf.add_page()
-        pdf.write_html(html)
-        pdf.output(pdfFile)
+        # pdfkit will be used on Linux and probably MacOS
+        # xhtml2pdf (pisa) will be used on Windows
+        try:
+            pdfkit.from_file(htmlFile, pdfFile)
+        except:
+            tableStyle = getResourcePath('resources/stats_table_style.css')
+
+            htmlTable = os.path.join(workingDir, htmlFilename)
+            with open(htmlTable, 'w+') as resultTable:
+                resultTable.write(tableText)
+
+            with open(htmlTable, 'r') as resultTable:
+                tableString = resultTable.read()
+
+            with open(tableStyle, 'r') as style:
+                styleString = style.read()
+
+            with open(pdfFile, 'w+b') as resultFile:
+                pisa.CreatePDF(tableString, resultFile, default_css=styleString)
 
 
 # Comparison Figure objects were going to be used to display four plots but ...
