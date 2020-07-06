@@ -1,3 +1,4 @@
+numpy==1.18.5
 atomicwrites==1.4.0
 attrs==19.3.0
 certifi==2020.4.5.1
@@ -9,11 +10,10 @@ fpdf==1.7.2
 future==0.18.2
 html5lib==1.0.1; sys_platform != 'linux'
 idna==2.9
-kiwisolver==1.2.0
+kiwisolver==1.1.0
 lxml==4.5.1
 matplotlib==3.2.1
 more-itertools==8.3.0
-numpy==1.18.5
 obspy==1.2.1
 packaging==20.4
 pandas==1.0.4

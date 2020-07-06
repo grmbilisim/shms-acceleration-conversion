@@ -303,6 +303,7 @@ class Conversion:
 
         self.df['g'] = self.df['count'].apply(lambda x: self.convertCountToG(x))
         self.df = self.getZeroPaddedDf(self.df, ['timestamp', 'g'])
+        self.df['time (UTC)'] = self.df['timestamp'].apply(lambda x: self.getTime(x))
         # add 'offset_g' column by detrending 'g'
         self.df['offset_g'] = detrend(self.df['g'], type='constant')
         self.df['acc_ms2'] = self.df['offset_g'].apply(lambda x: self.convertGToMetric(x))
@@ -341,6 +342,15 @@ class Conversion:
         print('tail')
         print(self.df.tail())
         print('length of df: {0}'.format(len(self.df)))
+
+    def getTime(self, timestamp):
+        """
+        convert full timestamp to format 08:09:59.123
+        timestamp: string holding timestamp with full date and time
+        return: string holding time in format 08:09:59.123 or None
+        """
+        if timestamp:
+            return timestamp[11:-3]
 
     def setSensitivity(self, sensorCodeWithChannel):
         """
@@ -506,10 +516,13 @@ class Conversion:
 
         ax = canvasObject.figure.add_subplot(8, 3, subplotPos)
 
-        plot = self.df.reset_index().plot(kind='line', x='index', y=column, color='gray', title=plotTitle, linewidth=0.25, ax=ax)
+        # does not work with pandas plotting
+        #ax.set_xlabel('Time (UTC)')
+
+        plot = self.df.reset_index().plot(kind='line', x='time (UTC)', y=column, color='gray', title=plotTitle, linewidth=0.25, ax=ax)
 
         ax.set_ylim(-yLimit, yLimit)
-        ax.xaxis.set_visible(False)
+        #ax.xaxis.set_visible(False)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))
         ax.get_legend().remove()
 
@@ -529,13 +542,14 @@ class Conversion:
         """
         subplotPos = self.comparisonSubplotDict[self.floor]
         ax = canvasObject.figure.add_subplot(4, 1, subplotPos)
-        plot = self.df.reset_index().plot(kind='line', x='index', y='highpassed_displacement_cm', color='gray', linewidth=0.25, ax=ax)
+        plot = self.df.reset_index().plot(kind='line', x='time (UTC)', y='highpassed_displacement_cm', color='gray', linewidth=0.25, ax=ax)
         ax.set_ylim(-yLimit, yLimit)
         ax.xaxis.set_visible(False)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))
         if self.floor == '39':
             ax.set_title(canvasObject.windowTitle)
         ax.set_ylabel(self.sensorCodeWithChannel, rotation=0)
+        ax.set_xlabel('Time (UTC)')
         ax.get_legend().remove()
 
         # mark peak value and add text to plot
