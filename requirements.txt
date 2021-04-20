@@ -19,7 +19,7 @@ packaging==20.4
 pandas==1.0.4
 pdfkit==0.6.1
 pluggy==0.13.1
-py==1.8.1
+py==1.10.0
 pyparsing==2.4.7
 PyPDF2==1.26.0
 PyQt5==5.15.0
