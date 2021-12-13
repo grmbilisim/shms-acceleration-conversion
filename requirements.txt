@@ -11,7 +11,7 @@ future==0.18.2
 html5lib==1.0.1; sys_platform != 'linux'
 idna==2.9
 kiwisolver==1.1.0
-lxml==4.5.1
+lxml==4.6.5
 matplotlib==3.2.1
 more-itertools==8.3.0
 obspy==1.2.1
